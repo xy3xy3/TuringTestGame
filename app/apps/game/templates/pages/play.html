@@ -150,8 +150,51 @@ let currentRound = {{ current_round }};
 let currentPhase = 'waiting';
 let currentRoundId = '';
 
+// 倒计时相关
+let countdownRemaining = 0;
+let countdownTotal = 30;  // 当前阶段总时长
+let countdownInterval = null;
+
 // SSE 连接
 let eventSource = null;
+
+// 启动本地倒计时
+function startLocalCountdown(remaining, total) {
+  countdownRemaining = remaining;
+  countdownTotal = total || remaining;
+  
+  // 清除之前的定时器
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+  }
+  
+  // 立即更新显示
+  updateCountdownDisplay();
+  
+  // 每秒递减
+  countdownInterval = setInterval(() => {
+    countdownRemaining = Math.max(0, countdownRemaining - 1);
+    updateCountdownDisplay();
+    
+    if (countdownRemaining <= 0) {
+      clearInterval(countdownInterval);
+    }
+  }, 1000);
+}
+
+// 更新倒计时显示
+function updateCountdownDisplay() {
+  document.getElementById('countdown').textContent = countdownRemaining;
+  document.getElementById('progress-bar').style.width = `${(countdownRemaining / countdownTotal) * 100}%`;
+}
+
+// 停止本地倒计时
+function stopLocalCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
 
 function connectSSE() {
   eventSource = new EventSource(`/game/${roomId}/events`);
@@ -227,8 +270,16 @@ function connectSSE() {
 
   eventSource.addEventListener('countdown', (e) => {
     const data = JSON.parse(e.data);
-    document.getElementById('countdown').textContent = data.remaining;
-    document.getElementById('progress-bar').style.width = `${(data.remaining / 30) * 100}%`;
+    // 使用服务器时间同步本地倒计时，避免跳来跳去
+    // 根据当前阶段设置总时长
+    let totalTime = 30;  // 默认
+    if (data.phase === 'questioning') totalTime = 30;
+    else if (data.phase === 'answering') totalTime = 45;
+    else if (data.phase === 'voting') totalTime = 15;
+    else if (data.phase === 'setup') totalTime = 60;
+    
+    // 同步剩余时间并启动本地倒计时
+    startLocalCountdown(data.remaining, totalTime);
   });
 
   eventSource.addEventListener('round_result', (e) => {
@@ -249,6 +300,12 @@ function connectSSE() {
 
 function updatePhaseDisplay(phase) {
   currentPhase = phase;
+  
+  // 阶段变化时停止本地倒计时（结果揭晓阶段不需要倒计时）
+  if (phase === 'revealed') {
+    stopLocalCountdown();
+  }
+  
   const phaseNames = {
     'questioning': '提问阶段',
     'answering': '回答阶段',
