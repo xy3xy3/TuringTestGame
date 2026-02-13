@@ -237,6 +237,14 @@ async def set_player_ready(room_id: str, player_id: str, is_ready: bool) -> dict
     all_ready = all(p.is_ready for p in players)
     player_count = len(players)
 
+    # 通知所有玩家准备状态已变更
+    from app.services.game_manager import sse_manager
+    await sse_manager.publish(room_id, "player_ready_changed", {
+        "player_id": player_id,
+        "is_ready": is_ready,
+        "all_ready": all_ready,
+    })
+
     return {
         "success": True,
         "all_ready": all_ready,

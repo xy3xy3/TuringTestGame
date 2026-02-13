@@ -91,12 +91,15 @@ const roomId = '{{ room.id }}';
 const eventSource = new EventSource(`/game/${roomId}/events`);
 
 eventSource.addEventListener('player_joined', (e) => {
-  const data = JSON.parse(e.data);
-  htmx.ajax('GET', `/game/api/${roomId}/state`, {target: '#player-list'});
+  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
 });
 
 eventSource.addEventListener('player_left', (e) => {
-  htmx.ajax('GET', `/game/api/${roomId}/state`, {target: '#player-list'});
+  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+});
+
+eventSource.addEventListener('player_ready_changed', (e) => {
+  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
 });
 
 eventSource.addEventListener('game_starting', (e) => {

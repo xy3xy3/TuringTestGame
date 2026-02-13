@@ -398,6 +398,24 @@ async def test_chat(request: Request) -> dict[str, Any]:
     return {"success": False, "error": result.get("error", "调用失败")}
 
 
+@router.get("/{room_id}/players", response_class=HTMLResponse)
+async def get_room_players(request: Request, room_id: str) -> HTMLResponse:
+    """获取房间玩家列表（HTML partial）。"""
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content="<p>房间不存在</p>")
+
+    players = await game_room_service.get_players_in_room(room.room_id)
+
+    return templates.TemplateResponse(
+        "partials/room_player_list.html",
+        {
+            "request": request,
+            "players": players,
+        },
+    )
+
+
 @router.get("/api/{room_id}/state")
 async def get_room_state(room_id: str) -> dict[str, Any]:
     """获取房间状态（API）。"""

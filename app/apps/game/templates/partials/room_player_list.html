@@ -1,0 +1,22 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="player-list">
+  {% for p in players %}
+  <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+        {{ p.nickname[0] }}
+      </div>
+      <div>
+        <p class="text-white font-medium">{{ p.nickname }}</p>
+        <p class="text-purple-300 text-sm">{% if p.is_owner %}房主{% endif %}</p>
+      </div>
+    </div>
+    <div class="text-right">
+      {% if p.is_ready %}
+      <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">已准备</span>
+      {% else %}
+      <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">等待中</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
