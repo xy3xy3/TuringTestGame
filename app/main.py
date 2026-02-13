@@ -16,6 +16,7 @@ from .apps.admin.controllers.backup import router as backup_router
 from .apps.admin.controllers.config import router as config_router
 from .apps.admin.controllers.logs import router as logs_router
 from .apps.admin.controllers.rbac import router as admin_router
+from .apps.game.controllers.game import router as game_router
 from .config import APP_NAME, SECRET_KEY
 from .db import close_db, init_db
 from .middleware.auth import AdminAuthMiddleware
@@ -27,8 +28,9 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout"})
+app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout", "/game", "/game/create", "/game/join", "/game/api"})
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa_session")
+app.include_router(game_router)
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(admin_users_router)

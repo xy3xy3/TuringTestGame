@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}灵魂注入 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+  <div class="max-w-6xl mx-auto">
+    <!-- 顶部信息 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-white">灵魂注入</h1>
+        <p class="text-purple-200">设置你的 AI 角色，让它成为你的"灵魂"</p>
+      </div>
+      <div class="text-right">
+        <div id="countdown" class="text-3xl font-bold text-white">60</div>
+        <p class="text-purple-200 text-sm">秒后开始</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- 左侧：系统提示词 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
+        <h2 class="text-xl font-semibold text-white mb-4">🎭 系统提示词</h2>
+        <p class="text-purple-200 text-sm mb-4">定义你的 AI 角色性格、说话方式等。例如：</p>
+        <ul class="text-purple-300 text-sm mb-4 space-y-1">
+          <li>• "你是一个傲娇的二次元少女，句尾带'哼'"</li>
+          <li>• "你是一个严谨的物理学家，喜欢用专业术语"</li>
+          <li>• "你是一个 7 岁小孩，满是错别字"</li>
+        </ul>
+        <form id="setup-form" hx-post="/game/{{ room.id }}/setup" hx-target="#setup-result" hx-swap="innerHTML">
+          <textarea
+            name="system_prompt"
+            class="input w-full h-48"
+            placeholder="输入你的系统提示词..."
+            required
+          >{{ player.system_prompt or '' }}</textarea>
+
+          <div class="mt-4">
+            <label class="block text-sm text-purple-200 mb-1">选择 AI 模型</label>
+            <select name="ai_model_id" class="input w-full">
+              {% for model in ai_models %}
+              <option value="{{ model.id }}" {% if player.ai_model_id == model.id|string %}selected{% endif %}>
+                {{ model.name }} - {{ model.model_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <button type="submit" class="btn-primary w-full mt-4">锁定设置</button>
+        </form>
+        <div id="setup-result" class="mt-4"></div>
+      </div>
+
+      <!-- 右侧：测试对话 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
+        <h2 class="text-xl font-semibold text-white mb-4">🧪 图灵调试</h2>
+        <p class="text-purple-200 text-sm mb-4">在正式游戏前，与你的 AI 测试对话（无上下文）</p>
+
+        <div id="chat-area" class="h-64 overflow-y-auto bg-white/5 rounded-xl p-4 mb-4 space-y-3">
+          <div class="text-center text-purple-300 text-sm">
+            发送消息测试你的 AI 角色
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <input
+            type="text"
+            id="test-message"
+            class="input flex-1"
+            placeholder="输入测试消息..."
+            onkeypress="if(event.key==='Enter') sendTestMessage()"
+          />
+          <button class="btn-primary px-4" onclick="sendTestMessage()">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 倒计时进度条 -->
+    <div class="mt-6 bg-white/10 backdrop-blur-md rounded-2xl p-4">
+      <div class="h-2 bg-white/20 rounded-full overflow-hidden">
+        <div id="progress-bar" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-1000" style="width: 100%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const roomId = '{{ room.id }}';
+const setupTime = {{ room.config.setup_time }};
+let timeLeft = setupTime;
+let systemPrompt = '';
+
+// 更新倒计时
+const countdownInterval = setInterval(() => {
+  timeLeft--;
+  document.getElementById('countdown').textContent = timeLeft;
+  document.getElementById('progress-bar').style.width = `${(timeLeft / setupTime) * 100}%`;
+
+  if (timeLeft <= 0) {
+    clearInterval(countdownInterval);
+  }
+}, 1000);
+
+// SSE 监听
+const eventSource = new EventSource(`/game/${roomId}/events`);
+
+eventSource.addEventListener('countdown', (e) => {
+  const data = JSON.parse(e.data);
+  timeLeft = data.remaining;
+  document.getElementById('countdown').textContent = data.remaining;
+  document.getElementById('progress-bar').style.width = `${(data.remaining / setupTime) * 100}%`;
+});
+
+eventSource.addEventListener('game_starting', (e) => {
+  window.location.href = `/game/${roomId}/play`;
+});
+
+// 测试消息发送
+async function sendTestMessage() {
+  const input = document.getElementById('test-message');
+  const message = input.value.trim();
+  if (!message) return;
+
+  // 获取当前系统提示词
+  const form = document.getElementById('setup-form');
+  systemPrompt = form.querySelector('textarea[name="system_prompt"]').value;
+
+  if (!systemPrompt) {
+    alert('请先填写系统提示词');
+    return;
+  }
+
+  // 显示用户消息
+  const chatArea = document.getElementById('chat-area');
+  chatArea.innerHTML += `<div class="text-right"><div class="inline-block bg-purple-500/30 rounded-lg px-3 py-2 text-white">${message}</div></div>`;
+
+  input.value = '';
+  chatArea.scrollTop = chatArea.scrollHeight;
+
+  // 调用 AI
+  chatArea.innerHTML += `<div class="text-center text-purple-300 text-sm">AI 正在思考...</div>`;
+  chatArea.scrollTop = chatArea.scrollHeight;
+
+  const response = await fetch('/game/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      system_prompt: systemPrompt,
+      message: message,
+    })
+  });
+
+  const result = await response.json();
+
+  // 移除思考中提示
+  chatArea.querySelectorAll('.text-center.text-purple-300').forEach(el => el.remove());
+
+  if (result.success) {
+    chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-pink-500/30 rounded-lg px-3 py-2 text-white">${result.content}</div></div>`;
+  } else {
+    chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-red-500/30 rounded-lg px-3 py-2 text-red-300">${result.error}</div></div>`;
+  }
+
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+// 处理表单提交
+document.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target.id === 'setup-result') {
+    try {
+      const data = JSON.parse(evt.detail.target.textContent);
+      if (data.success) {
+        document.getElementById('setup-result').innerHTML = '<p class="text-green-400">设置已锁定！等待其他玩家...</p>';
+      }
+    } catch (e) {}
+  }
+});
+</script>
+{% endblock %}

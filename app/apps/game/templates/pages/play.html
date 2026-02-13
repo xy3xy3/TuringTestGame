@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+
+{% block title %}游戏进行中 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- 顶部信息栏 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-bold text-white">第 <span id="round-number">{{ current_round }}</span> 轮</h1>
+          <p class="text-purple-200 text-sm">房间号：{{ room.room_id }}</p>
+        </div>
+        <div class="text-right">
+          <div id="phase-display" class="text-lg font-semibold text-white">等待中...</div>
+          <div id="countdown" class="text-3xl font-bold text-purple-400">--</div>
+        </div>
+      </div>
+      
+      <!-- 进度条 -->
+      <div class="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
+        <div id="progress-bar" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-1000" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- 玩家信息栏 -->
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <!-- 提问者 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+        <p class="text-purple-200 text-sm mb-1">提问者</p>
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold" id="interrogator-avatar">
+            ?
+          </div>
+          <span class="text-white font-medium" id="interrogator-name">等待中...</span>
+        </div>
+      </div>
+      
+      <!-- 被测者 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+        <p class="text-purple-200 text-sm mb-1">被测者</p>
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-sm font-bold" id="subject-avatar">
+            ?
+          </div>
+          <span class="text-white font-medium" id="subject-name">等待中...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 问答区域 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-4 min-h-[300px]">
+      <!-- 问题显示 -->
+      <div id="question-area" class="mb-6">
+        <p class="text-purple-200 text-sm mb-2">问题：</p>
+        <div class="bg-blue-500/20 rounded-xl p-4">
+          <p class="text-white text-lg" id="question-text">等待提问...</p>
+        </div>
+      </div>
+
+      <!-- 回答显示 -->
+      <div id="answer-area">
+        <p class="text-purple-200 text-sm mb-2">回答：</p>
+        <div id="answer-content" class="bg-pink-500/20 rounded-xl p-4 hidden">
+          <p class="text-white text-lg" id="answer-text">等待回答...</p>
+          <p class="text-purple-300 text-sm mt-2" id="answer-type-label"></p>
+        </div>
+        
+        <!-- 加载动画 -->
+        <div id="loading-area" class="text-center py-8">
+          <div class="inline-flex items-center gap-2 text-purple-300">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
+            <span>对方正在输入...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作区域 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
+      <!-- 提问者输入 -->
+      <div id="question-input-area" class="hidden">
+        <p class="text-purple-200 text-sm mb-2">请输入你的问题：</p>
+        <div class="flex gap-2">
+          <input type="text" id="question-input" class="input flex-1" placeholder="输入问题..." 
+            onkeypress="if(event.key==='Enter') submitQuestion()" />
+          <button class="btn-primary px-6" onclick="submitQuestion()">提问</button>
+        </div>
+      </div>
+
+      <!-- 被测者选择 -->
+      <div id="answer-choice-area" class="hidden">
+        <p class="text-purple-200 text-sm mb-2">请选择回答方式：</p>
+        <div class="flex gap-4">
+          <button class="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-4 px-6 rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all" onclick="showHumanAnswer()">
+            <i class="fa-solid fa-user mr-2"></i>亲自回答
+          </button>
+          <button class="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all" onclick="submitAIAnswer()">
+            <i class="fa-solid fa-robot mr-2"></i>AI 代答
+          </button>
+        </div>
+      </div>
+
+      <!-- 被测者手动输入 -->
+      <div id="answer-input-area" class="hidden">
+        <p class="text-purple-200 text-sm mb-2">请输入你的回答：</p>
+        <div class="flex gap-2">
+          <textarea id="answer-input" class="input flex-1 h-24" placeholder="输入回答..."></textarea>
+          <button class="btn-primary px-6" onclick="submitHumanAnswer()">提交</button>
+        </div>
+      </div>
+
+      <!-- 投票区域 -->
+      <div id="vote-area" class="hidden">
+        <p class="text-purple-200 text-sm mb-2">判断这个回答是：</p>
+        <div class="flex gap-4">
+          <button class="flex-1 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold py-3 px-4 rounded-xl border border-blue-500/30 transition-all" onclick="submitVote('human')">
+            <i class="fa-solid fa-user mr-2"></i>真人
+          </button>
+          <button class="flex-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 font-bold py-3 px-4 rounded-xl border border-red-500/30 transition-all" onclick="submitVote('ai')">
+            <i class="fa-solid fa-robot mr-2"></i>AI
+          </button>
+          <button class="flex-1 bg-gray-500/20 hover:bg-gray-500/40 text-gray-400 font-bold py-3 px-4 rounded-xl border border-gray-500/30 transition-all" onclick="submitVote('skip')">
+            <i class="fa-solid fa-forward mr-2"></i>跳过
+          </button>
+        </div>
+      </div>
+
+      <!-- 等待区域 -->
+      <div id="wait-area" class="text-center py-8">
+        <p class="text-purple-300">请等待其他玩家操作...</p>
+      </div>
+    </div>
+
+    <!-- 玩家得分 -->
+    <div class="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-4">
+      <p class="text-purple-200 text-sm mb-2">玩家得分：</p>
+      <div class="flex flex-wrap gap-2" id="score-board">
+        <!-- 玩家得分由 SSE 更新 -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const roomId = '{{ room.id }}';
+const playerId = '{{ player_id }}';
+let currentRound = {{ current_round }};
+let currentPhase = 'waiting';
+let currentRoundId = '';
+
+// SSE 连接
+let eventSource = null;
+
+function connectSSE() {
+  eventSource = new EventSource(`/game/${roomId}/events`);
+  
+  eventSource.addEventListener('new_round', (e) => {
+    const data = JSON.parse(e.data);
+    currentRound = data.round_number;
+    currentRoundId = data.round_id || '';
+    document.getElementById('round-number').textContent = data.round_number;
+    document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
+    document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
+    document.getElementById('subject-name').textContent = data.subject_nickname;
+    document.getElementById('subject-avatar').textContent = data.subject_nickname[0];
+    updatePhaseDisplay('questioning');
+  });
+
+  eventSource.addEventListener('new_question', (e) => {
+    const data = JSON.parse(e.data);
+    document.getElementById('question-text').textContent = data.question;
+    updatePhaseDisplay('answering');
+  });
+
+  eventSource.addEventListener('answer_submitted', (e) => {
+    document.getElementById('loading-area').classList.remove('hidden');
+    document.getElementById('answer-content').classList.add('hidden');
+  });
+
+  eventSource.addEventListener('new_answer', (e) => {
+    const data = JSON.parse(e.data);
+    document.getElementById('loading-area').classList.add('hidden');
+    document.getElementById('answer-content').classList.remove('hidden');
+    document.getElementById('answer-text').textContent = data.answer;
+    document.getElementById('answer-type-label').textContent = data.answer_type === 'ai' ? '（AI 代答）' : '（真人回答）';
+    updatePhaseDisplay('voting');
+  });
+
+  eventSource.addEventListener('countdown', (e) => {
+    const data = JSON.parse(e.data);
+    document.getElementById('countdown').textContent = data.remaining;
+    document.getElementById('progress-bar').style.width = `${(data.remaining / 30) * 100}%`;
+  });
+
+  eventSource.addEventListener('round_result', (e) => {
+    const data = JSON.parse(e.data);
+    updateScoreBoard(data.player_scores);
+    updatePhaseDisplay('revealed');
+  });
+
+  eventSource.addEventListener('game_over', (e) => {
+    const data = JSON.parse(e.data);
+    window.location.href = `/game/${roomId}/result?data=` + encodeURIComponent(JSON.stringify(data));
+  });
+
+  eventSource.onerror = () => {
+    console.log('SSE connection error, reconnecting...');
+  };
+}
+
+function updatePhaseDisplay(phase) {
+  currentPhase = phase;
+  const phaseNames = {
+    'questioning': '提问阶段',
+    'answering': '回答阶段',
+    'voting': '投票阶段',
+    'revealed': '结果揭晓'
+  };
+  document.getElementById('phase-display').textContent = phaseNames[phase] || phase;
+  
+  // 显示/隐藏操作区域
+  document.getElementById('question-input-area').classList.add('hidden');
+  document.getElementById('answer-choice-area').classList.add('hidden');
+  document.getElementById('answer-input-area').classList.add('hidden');
+  document.getElementById('vote-area').classList.add('hidden');
+  document.getElementById('wait-area').classList.add('hidden');
+
+  if (phase === 'questioning') {
+    document.getElementById('question-input-area').classList.remove('hidden');
+  } else if (phase === 'answering') {
+    document.getElementById('answer-choice-area').classList.remove('hidden');
+  } else if (phase === 'voting') {
+    document.getElementById('vote-area').classList.remove('hidden');
+  } else if (phase === 'revealed') {
+    document.getElementById('wait-area').classList.remove('hidden');
+    document.getElementById('wait-area').querySelector('p').textContent = '结果已揭晓，等待下一轮...';
+  } else {
+    document.getElementById('wait-area').classList.remove('hidden');
+  }
+}
+
+function updateScoreBoard(scores) {
+  const board = document.getElementById('score-board');
+  board.innerHTML = '';
+  for (const [id, score] of Object.entries(scores)) {
+    const badge = document.createElement('span');
+    badge.className = 'px-3 py-1 bg-white/10 rounded-full text-white text-sm';
+    badge.textContent = `${id}: ${score}分`;
+    board.appendChild(badge);
+  }
+}
+
+async function submitQuestion() {
+  const input = document.getElementById('question-input');
+  const question = input.value.trim();
+  if (!question) return;
+
+  await fetch(`/game/${roomId}/question`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: `question=${encodeURIComponent(question)}&round_id=${encodeURIComponent(currentRoundId)}`
+  });
+  
+  input.value = '';
+}
+
+function showHumanAnswer() {
+  document.getElementById('answer-choice-area').classList.add('hidden');
+  document.getElementById('answer-input-area').classList.remove('hidden');
+}
+
+async function submitAIAnswer() {
+  await fetch(`/game/${roomId}/answer`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: `answer_type=ai&answer_content=&round_id=${encodeURIComponent(currentRoundId)}`
+  });
+}
+
+async function submitHumanAnswer() {
+  const input = document.getElementById('answer-input');
+  const answer = input.value.trim();
+  if (!answer) return;
+
+  await fetch(`/game/${roomId}/answer`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: `answer_type=human&answer_content=${encodeURIComponent(answer)}&round_id=${encodeURIComponent(currentRoundId)}`
+  });
+  
+  input.value = '';
+}
+
+async function submitVote(vote) {
+  await fetch(`/game/${roomId}/vote`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: `vote=${vote}&round_id=${encodeURIComponent(currentRoundId)}`
+  });
+  
+  document.getElementById('vote-area').classList.add('hidden');
+  document.getElementById('wait-area').classList.remove('hidden');
+  document.getElementById('wait-area').querySelector('p').textContent = '已投票，等待其他玩家...';
+}
+
+// 页面加载时连接 SSE
+connectSSE();
+</script>
+{% endblock %}

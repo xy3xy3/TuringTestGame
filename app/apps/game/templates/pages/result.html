@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}游戏结束 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- 标题 -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 mb-4">
+        <i class="fa-solid fa-trophy text-4xl text-white"></i>
+      </div>
+      <h1 class="text-4xl font-bold text-white mb-2">游戏结束！</h1>
+      <p class="text-purple-200">恭喜以下玩家取得胜利</p>
+    </div>
+
+    <!-- 排行榜 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">🏆 最终排行榜</h2>
+      <div class="space-y-3" id="leaderboard">
+        <!-- 玩家得分由 JS 填充 -->
+      </div>
+    </div>
+
+    <!-- 成就展示 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6" id="achievements-area">
+      <h2 class="text-xl font-semibold text-white mb-4">🎖️ 成就</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="achievements">
+        <!-- 成就由 JS 填充 -->
+      </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="flex gap-4">
+      <button class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500 py-3" onclick="window.location.href='/game'">
+        <i class="fa-solid fa-house mr-2"></i>返回大厅
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 从 URL 获取游戏结果数据
+const urlParams = new URLSearchParams(window.location.search);
+const dataParam = urlParams.get('data');
+
+if (dataParam) {
+  try {
+    const gameData = JSON.parse(decodeURIComponent(dataParam));
+    
+    // 渲染排行榜
+    const leaderboard = document.getElementById('leaderboard');
+    gameData.leaderboard.forEach((player, index) => {
+      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '  ';
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between bg-white/5 rounded-xl p-4';
+      row.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">${medal}</span>
+          <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+            ${player.nickname[0]}
+          </div>
+          <span class="text-white font-medium">${player.nickname}</span>
+        </div>
+        <span class="text-2xl font-bold text-purple-400">${player.score}分</span>
+      `;
+      leaderboard.appendChild(row);
+    });
+
+    // 渲染成就
+    const achievements = document.getElementById('achievements');
+    if (gameData.achievements) {
+      // 获胜者
+      if (gameData.achievements.winners && gameData.achievements.winners.length > 0) {
+        const winnerDiv = document.createElement('div');
+        winnerDiv.className = 'bg-yellow-500/20 rounded-xl p-4 text-center';
+        winnerDiv.innerHTML = `
+          <p class="text-yellow-400 text-lg font-bold">🏆 冠军</p>
+          <p class="text-white">${gameData.achievements.winners.map(w => w.nickname).join('、')}</p>
+          <p class="text-purple-300 text-sm">${gameData.achievements.max_score}分</p>
+        `;
+        achievements.appendChild(winnerDiv);
+      }
+    } else {
+      document.getElementById('achievements-area').classList.add('hidden');
+    }
+  } catch (e) {
+    console.error('Failed to parse game data:', e);
+  }
+}
+</script>
+{% endblock %}

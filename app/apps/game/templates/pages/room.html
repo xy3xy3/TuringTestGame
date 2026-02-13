@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}房间大厅 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- 房间信息 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-white">房间大厅</h1>
+          <p class="text-purple-200">房间号：<span class="font-mono text-lg">{{ room.room_code }}</span></p>
+        </div>
+        <div class="text-right">
+          <p class="text-purple-200">状态：<span class="text-white">{{ room.phase }}</span></p>
+          <p class="text-purple-200">回合：{{ room.current_round }}/{{ room.config.total_rounds }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 玩家列表 -->
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">玩家列表 ({{ players|length }}/{{ room.config.max_players }})</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="player-list">
+        {% for p in players %}
+        <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+              {{ p.nickname[0] }}
+            </div>
+            <div>
+              <p class="text-white font-medium">{{ p.nickname }}</p>
+              <p class="text-purple-300 text-sm">{% if p.is_owner %}房主{% endif %}</p>
+            </div>
+          </div>
+          <div class="text-right">
+            {% if p.is_ready %}
+            <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">已准备</span>
+            {% else %}
+            <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">等待中</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="flex gap-4">
+      <button
+        id="ready-btn"
+        class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500"
+        hx-post="/game/{{ room.id }}/ready"
+        hx-vals='{"is_ready": "true"}'
+        hx-target="#ready-result"
+      >
+        准备
+      </button>
+      <button
+        id="start-btn"
+        class="flex-1 btn-primary"
+        hx-post="/game/{{ room.id }}/start"
+        hx-target="#start-result"
+      >
+        开始游戏
+      </button>
+      <button
+        class="px-6 btn-ghost text-red-400"
+        hx-post="/game/{{ room.id }}/leave"
+        hx-confirm="确定要离开房间吗？"
+        hx-target="body"
+        hx-on::after-htmx="window.location.href='/game'"
+      >
+        离开
+      </button>
+    </div>
+
+    <div id="ready-result" class="mt-4"></div>
+    <div id="start-result" class="mt-4"></div>
+
+    <!-- SSE 事件监听 -->
+    <div id="sse-data" class="hidden" data-room-id="{{ room.id }}"></div>
+  </div>
+</div>
+
+<script>
+const roomId = '{{ room.id }}';
+
+// SSE 连接
+const eventSource = new EventSource(`/game/${roomId}/events`);
+
+eventSource.addEventListener('player_joined', (e) => {
+  const data = JSON.parse(e.data);
+  htmx.ajax('GET', `/game/api/${roomId}/state`, {target: '#player-list'});
+});
+
+eventSource.addEventListener('player_left', (e) => {
+  htmx.ajax('GET', `/game/api/${roomId}/state`, {target: '#player-list'});
+});
+
+eventSource.addEventListener('game_starting', (e) => {
+  window.location.href = `/game/${roomId}/setup`;
+});
+
+eventSource.onerror = () => {
+  console.log('SSE connection error');
+};
+</script>
+{% endblock %}
