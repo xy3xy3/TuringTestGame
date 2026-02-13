@@ -153,38 +153,22 @@ class GameManager:
             "subject_nickname": subject.nickname,
             "question_time": room.config.question_duration,
         })
-    
-        
-    
-                # 启动提问倒计时
-    
-                await self._start_question_timer(room_id, str(game_round.id))
-    
-        
-    
-            async def _start_question_timer(self, room_id: str, round_id: str):
-    
-                """启动提问阶段倒计时。"""
-    
-                room = await game_room_service.get_room_by_id(room_id)
-    
-                if not room:
-    
-                    return
-    
-        
-    
-                question_time = room.config.question_duration
-    
-        
-    
-                # 倒计时通知
-    
-                for remaining in range(question_time, 0, -5):
-    
-                    await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "questioning"})
-    
-                    await asyncio.sleep(min(5, remaining))
+
+        # 启动提问倒计时
+        await self._start_question_timer(room_id, str(game_round.id))
+
+    async def _start_question_timer(self, room_id: str, round_id: str):
+        """启动提问阶段倒计时。"""
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room:
+            return
+
+        question_time = room.config.question_duration
+
+        # 倒计时通知
+        for remaining in range(question_time, 0, -5):
+            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "questioning"})
+            await asyncio.sleep(min(5, remaining))
 
         # 检查是否已提交问题
         game_round = await GameRound.get(PydanticObjectId(round_id))
@@ -255,28 +239,28 @@ class GameManager:
         await game_round.save()
 
         # 通知被测者
-                await sse_manager.publish(room_id, "answer_phase", {
-                    "round_id": round_id,
-                    "subject_id": game_round.subject_id,
-                    "question": game_round.question,
-                    "answer_time": room.config.answer_duration,
-                })
-        
-                # 启动回答倒计时
-                await self._start_answer_timer(room_id, round_id)
-        
-            async def _start_answer_timer(self, room_id: str, round_id: str):
-                """启动回答阶段倒计时。"""
-                room = await game_room_service.get_room_by_id(room_id)
-                if not room:
-                    return
-        
-                answer_time = room.config.answer_duration
-        
-                # 倒计时通知
-                for remaining in range(answer_time, 0, -5):
-                    await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "answering"})
-                    await asyncio.sleep(min(5, remaining))
+        await sse_manager.publish(room_id, "answer_phase", {
+            "round_id": round_id,
+            "subject_id": game_round.subject_id,
+            "question": game_round.question,
+            "answer_time": room.config.answer_duration,
+        })
+
+        # 启动回答倒计时
+        await self._start_answer_timer(room_id, round_id)
+
+    async def _start_answer_timer(self, room_id: str, round_id: str):
+        """启动回答阶段倒计时。"""
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room:
+            return
+
+        answer_time = room.config.answer_duration
+
+        # 倒计时通知
+        for remaining in range(answer_time, 0, -5):
+            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "answering"})
+            await asyncio.sleep(min(5, remaining))
         # 检查是否已提交回答
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if game_round and not game_round.answer:
@@ -411,26 +395,26 @@ class GameManager:
         await game_round.save()
 
         # 通知所有玩家投票
-                await sse_manager.publish(room_id, "voting_phase", {
-                    "round_id": round_id,
-                    "vote_time": room.config.vote_duration,
-                })
-        
-                # 启动投票倒计时
-                await self._start_vote_timer(room_id, round_id)
-        
-            async def _start_vote_timer(self, room_id: str, round_id: str):
-                """启动投票阶段倒计时。"""
-                room = await game_room_service.get_room_by_id(room_id)
-                if not room:
-                    return
-        
-                vote_time = room.config.vote_duration
-        
-                # 倒计时通知
-                for remaining in range(vote_time, 0, -5):
-                    await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "voting"})
-                    await asyncio.sleep(min(5, remaining))
+        await sse_manager.publish(room_id, "voting_phase", {
+            "round_id": round_id,
+            "vote_time": room.config.vote_duration,
+        })
+
+        # 启动投票倒计时
+        await self._start_vote_timer(room_id, round_id)
+
+    async def _start_vote_timer(self, room_id: str, round_id: str):
+        """启动投票阶段倒计时。"""
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room:
+            return
+
+        vote_time = room.config.vote_duration
+
+        # 倒计时通知
+        for remaining in range(vote_time, 0, -5):
+            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "voting"})
+            await asyncio.sleep(min(5, remaining))
         # 结算本回合
         await self._settle_round(room_id, round_id)
 
