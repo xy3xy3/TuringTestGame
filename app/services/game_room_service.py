@@ -220,7 +220,12 @@ async def set_player_ready(room_id: str, player_id: str, is_ready: bool) -> dict
     Returns:
         {"success": True, "all_ready": bool, "player_count": int}
     """
-    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room_id})
+    # 获取房间以获取正确的 room_id（6位码）
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room.room_id})
     if not player:
         return {"success": False, "error": "玩家不存在"}
 
@@ -228,7 +233,7 @@ async def set_player_ready(room_id: str, player_id: str, is_ready: bool) -> dict
     await player.save()
 
     # 检查是否所有人都准备好了
-    players = await get_players_in_room(room_id)
+    players = await get_players_in_room(room.room_id)
     all_ready = all(p.is_ready for p in players)
     player_count = len(players)
 
@@ -245,14 +250,18 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
     Returns:
         {"success": True, "room_deleted": bool}
     """
-    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room_id})
+    # 获取房间以获取正确的 room_id（6位码）
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room.room_id})
     if not player:
         return {"success": False, "error": "玩家不存在"}
 
     # 如果是房主离开，解散房间
     if player.is_owner:
-        await GamePlayer.delete_many({"room_id": room_id})
-        room = await get_room_by_id(room_id)
+        await GamePlayer.delete_many({"room_id": room.room_id})
         if room:
             await room.delete()
         return {"success": True, "room_deleted": True}
@@ -261,9 +270,8 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
     await player.delete()
 
     # 检查是否还有其他玩家
-    remaining = await GamePlayer.find({"room_id": room_id}).count()
+    remaining = await GamePlayer.find({"room_id": room.room_id}).count()
     if remaining == 0:
-        room = await get_room_by_id(room_id)
         if room:
             await room.delete()
         return {"success": True, "room_deleted": True}
@@ -288,7 +296,12 @@ async def update_player_setup(
     Returns:
         {"success": True} 或 {"success": False, "error": "..."}
     """
-    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room_id})
+    # 获取房间以获取正确的 room_id（6位码）
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room.room_id})
     if not player:
         return {"success": False, "error": "玩家不存在"}
 
@@ -306,7 +319,12 @@ async def check_all_players_ready(room_id: str) -> dict[str, Any]:
     Returns:
         {"all_ready": bool, "ready_count": int, "total_count": int}
     """
-    players = await get_players_in_room(room_id)
+    # 获取房间以获取正确的 room_id（6位码）
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"all_ready": False, "ready_count": 0, "total_count": 0}
+
+    players = await get_players_in_room(room.room_id)
     total_count = len(players)
     ready_count = sum(1 for p in players if p.phase == "setup")
 
@@ -328,8 +346,13 @@ async def kick_player(room_id: str, player_id: str, requester_id: str) -> dict[s
     Returns:
         {"success": True} 或 {"success": False, "error": "..."}
     """
+    # 获取房间以获取正确的 room_id（6位码）
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
     # 验证请求者是房主
-    requester = await GamePlayer.find_one({"_id": PydanticObjectId(requester_id), "room_id": room_id})
+    requester = await GamePlayer.find_one({"_id": PydanticObjectId(requester_id), "room_id": room.room_id})
     if not requester or not requester.is_owner:
         return {"success": False, "error": "只有房主可以踢人"}
 

@@ -98,7 +98,8 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
     if not room:
         raise HTTPException(status_code=404, detail="房间不存在")
 
-    players = await game_room_service.get_players_in_room(room_id)
+    # 使用房间的 room_id（6位码）来查询玩家
+    players = await game_room_service.get_players_in_room(room.room_id)
 
     return templates.TemplateResponse(
         "pages/room.html",
@@ -404,7 +405,8 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
     if not room:
         return {"success": False, "error": "房间不存在"}
 
-    players = await game_room_service.get_players_in_room(room_id)
+    # 使用房间的 room_id（6位码）来查询玩家
+    players = await game_room_service.get_players_in_room(room.room_id)
 
     return {
         "success": True,
