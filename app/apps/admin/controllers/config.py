@@ -80,6 +80,7 @@ async def config_page(request: Request) -> HTMLResponse:
     smtp = await config_service.get_smtp_config()
     audit_actions = await config_service.get_audit_log_actions()
     backup_config = await backup_service.get_backup_config()
+    collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
     cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
