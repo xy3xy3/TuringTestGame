@@ -63,36 +63,35 @@ class GameManager:
 
     async def start_game(self, room_id: str) -> dict[str, Any]:
         """开始游戏。
-
+    
         Returns:
             {"success": True} 或 {"success": False, "error": "..."}
         """
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return {"success": False, "error": "房间不存在"}
-
+    
         if room.phase != "waiting":
             return {"success": False, "error": "游戏已经开始"}
-
-        # 检查玩家数
-        players = await game_room_service.get_players_in_room(room_id)
+    
+        # 检查玩家数（使用 6 位房间码查询）
+        players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < room.config.min_players:
             return {"success": False, "error": f"需要至少 {room.config.min_players} 名玩家"}
-
+    
         # 更新房间状态为 SETUP
         room.phase = "setup"
         room.current_round = 0
         await room.save()
-
-        # 通知所有玩家
+    
+        # 通知所有玩家（使用 MongoDB ObjectId）
         await sse_manager.publish(room_id, "game_starting", {
             "countdown": room.config.setup_time,
             "phase": "setup",
         })
-
+    
         # 启动灵魂注入倒计时
         await self._start_setup_timer(room_id)
-
         return {"success": True}
 
     async def _start_setup_timer(self, room_id: str):
@@ -118,23 +117,23 @@ class GameManager:
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return
-
-        players = await game_room_service.get_players_in_room(room_id)
+    
+        players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < 2:
             await sse_manager.publish(room_id, "game_error", {"error": "玩家数不足"})
             await self._end_game(room_id)
             return
-
+    
         # 更新房间状态
         room.phase = "playing"
         room.current_round = 1
         await room.save()
-
+    
         # 随机选择提问者和被测者
         random.shuffle(players)
         interrogator = players[0]
         subject = players[1]
-
+    
         # 创建回合记录
         game_round = GameRound(
             room_id=room_id,
@@ -144,7 +143,7 @@ class GameManager:
             status="questioning",
         )
         await game_round.insert()
-
+    
         # 通知所有玩家
         await sse_manager.publish(room_id, "new_round", {
             "round_number": 1,
@@ -154,10 +153,9 @@ class GameManager:
             "subject_nickname": subject.nickname,
             "question_time": room.config.question_time,
         })
-
+    
         # 启动提问倒计时
         await self._start_question_timer(room_id, str(game_round.id))
-
     async def _start_question_timer(self, room_id: str, round_id: str):
         """启动提问阶段倒计时。"""
         room = await game_room_service.get_room_by_id(room_id)
@@ -276,66 +274,67 @@ class GameManager:
         await self._start_voting_phase(room_id, round_id)
 
     async def submit_answer(
-        self,
-        room_id: str,
-        round_id: str,
-        player_id: str,
-        answer_type: str,
-        answer_content: str = "",
-    ) -> dict[str, Any]:
+            self,
+            room_id: str,
+            round_id: str,
+            player_id: str,
+            answer_type: str,
+            answer_content: str = "",
+        ) -> dict[str, Any]:
         """提交回答。
-
+    
         Args:
             room_id: 房间 ID
             round_id: 回合 ID
             player_id: 被测者 ID
             answer_type: "human" 或 "ai"
             answer_content: 手动回答的内容（当 answer_type 为 "human" 时需要）
-
+    
         Returns:
             {"success": True, "display_delay": float} 或 {"success": False, "error": "..."}
         """
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if not game_round:
             return {"success": False, "error": "回合不存在"}
-
+    
         if game_round.subject_id != player_id:
             return {"success": False, "error": "只有被测者可以提交回答"}
-
+    
         if game_round.answer:
             return {"success": False, "error": "回答已提交"}
-
+    
+        # 获取房间以获取正确的 room_id（6位码）
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room:
+            return {"success": False, "error": "房间不存在"}
+    
         # 计算提交时间
         submit_time = 0
         if game_round.question_at:
             submit_time = (datetime.now(timezone.utc) - game_round.question_at).total_seconds()
-
+    
         # 获取延迟
         display_delay = await ai_chat_service.calculate_display_delay(answer_type, submit_time)
-
+    
         # 根据类型处理回答
         if answer_type == "ai":
             # 调用 AI 生成回答
-            subject = await game_room_service.get_player_by_token(
-                (await game_room_service.get_players_in_room(room_id))[0].token
-            )
-            # 找到被测者
-            players = await game_room_service.get_players_in_room(room_id)
+            # 使用 6 位房间码查询玩家
+            players = await game_room_service.get_players_in_room(room.room_id)
             subject = next(p for p in players if str(p.id) == player_id)
-
+    
             result = await ai_chat_service.call_ai(
                 system_prompt=subject.system_prompt or "你是一个有趣的人",
                 user_message=game_round.question,
                 model_id=subject.ai_model_id,
             )
-
+    
             if not result["success"]:
                 return {"success": False, "error": result.get("error", "AI 调用失败")}
-
+    
             game_round.answer = result["content"]
             game_round.answer_type = "ai"
-            game_round.used_ai_model_id = subject.ai_model_id
-        else:
+            game_round.used_ai_model_id = subject.ai_model_id        else:
             # 手动回答
             if not answer_content.strip():
                 return {"success": False, "error": "回答内容不能为空"}
@@ -475,27 +474,26 @@ class GameManager:
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if not game_round:
             return
-
+    
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return
-
+    
         # 获取所有投票
         votes = await VoteRecord.find({
             "room_id": room_id,
             "round_number": game_round.round_number,
         }).to_list()
-
+    
         # 计算得分
         scores = self._calculate_scores(game_round, votes)
-
+    
         # 更新玩家得分
-        players = await game_room_service.get_players_in_room(room_id)
+        players = await game_room_service.get_players_in_room(room.room_id)
         for player in players:
             player_score = scores.get(str(player.id), 0)
-            player.score = (player.score or 0) + player_score
+            player.total_score = player.total_score + player_score
             await player.save()
-
         # 更新回合状态
         game_round.status = "revealed"
         await game_round.save()
@@ -562,22 +560,22 @@ class GameManager:
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return
-
-        players = await game_room_service.get_players_in_room(room_id)
+    
+        players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < 2:
             await sse_manager.publish(room_id, "game_error", {"error": "玩家数不足"})
             await self._end_game(room_id)
             return
-
+    
         # 更新房间状态
         room.current_round += 1
         await room.save()
-
+    
         # 随机选择提问者和被测者（轮换）
         random.shuffle(players)
         interrogator = players[0]
         subject = players[1]
-
+    
         # 创建回合记录
         game_round = GameRound(
             room_id=room_id,
@@ -587,7 +585,7 @@ class GameManager:
             status="questioning",
         )
         await game_round.insert()
-
+    
         # 通知所有玩家
         await sse_manager.publish(room_id, "new_round", {
             "round_number": room.current_round,
@@ -597,31 +595,29 @@ class GameManager:
             "subject_nickname": subject.nickname,
             "question_time": room.config.question_time,
         })
-
+    
         # 启动提问倒计时
         await self._start_question_timer(room_id, str(game_round.id))
-
     async def _end_game(self, room_id: str):
         """结束游戏。"""
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return
-
+    
         # 更新房间状态
         room.phase = "finished"
         await room.save()
-
+    
         # 获取玩家得分
-        players = await game_room_service.get_players_in_room(room_id)
+        players = await game_room_service.get_players_in_room(room.room_id)
         leaderboard = sorted(
-            [{"id": str(p.id), "nickname": p.nickname, "score": p.score or 0} for p in players],
+            [{"id": str(p.id), "nickname": p.nickname, "score": p.total_score} for p in players],
             key=lambda x: x["score"],
             reverse=True,
         )
-
+    
         # 统计成就
         achievements = self._calculate_achievements(players)
-
         # 通知游戏结束
         await sse_manager.publish(room_id, "game_over", {
             "leaderboard": leaderboard,
@@ -632,15 +628,14 @@ class GameManager:
         """计算成就。"""
         if not players:
             return {}
-
-        max_score = max(p.score or 0 for p in players)
-        winners = [p for p in players if (p.score or 0) == max_score]
-
+    
+        max_score = max(p.total_score for p in players)
+        winners = [p for p in players if p.total_score == max_score]
+    
         return {
             "winners": [{"id": str(p.id), "nickname": p.nickname} for p in winners],
             "max_score": max_score,
         }
-
 
 # 全局游戏管理器
 game_manager = GameManager()
