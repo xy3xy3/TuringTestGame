@@ -1,7 +1,7 @@
 services:
   mongo:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
-    container_name: pyfastadmin-mongo
+    container_name: TuringTestGame-mongo
     restart: unless-stopped
     ports:
       - "${MONGO_PORT:-27017}:27017"
