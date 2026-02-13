@@ -101,3 +101,38 @@ async def save_audit_log_actions(actions: list[str]) -> list[str]:
             updated_at=utc_now(),
         ).insert()
     return normalized
+
+
+# Base URL 配置（用于生成邀请链接）
+BASE_URL_KEY = "base_url"
+BASE_URL_DEFAULT = "http://127.0.0.1:8000"
+
+
+async def get_base_url() -> str:
+    """获取系统 base URL，用于生成邀请链接。"""
+    item = await find_config_item("system", BASE_URL_KEY)
+    if item and item.value.strip():
+        return item.value.strip().rstrip("/")
+    return BASE_URL_DEFAULT
+
+
+async def save_base_url(url: str) -> str:
+    """保存系统 base URL。"""
+    value = url.strip().rstrip("/") if url else BASE_URL_DEFAULT
+    item = await find_config_item("system", BASE_URL_KEY)
+    if item:
+        item.value = value
+        item.name = "系统访问地址"
+        item.description = "用于生成邀请链接等外部访问地址"
+        item.updated_at = utc_now()
+        await item.save()
+    else:
+        await ConfigItem(
+            key=BASE_URL_KEY,
+            name="系统访问地址",
+            value=value,
+            group="system",
+            description="用于生成邀请链接等外部访问地址",
+            updated_at=utc_now(),
+        ).insert()
+    return value

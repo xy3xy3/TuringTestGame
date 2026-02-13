@@ -17,6 +17,22 @@
           <p class="text-purple-200">回合：{{ room.current_round }}/{{ room.total_rounds }}</p>
         </div>
       </div>
+
+      <!-- 邀请链接 -->
+      <div class="mt-4 pt-4 border-t border-white/10">
+        <div class="flex items-center gap-2">
+          <span class="text-purple-200 text-sm whitespace-nowrap">邀请链接：</span>
+          <div class="flex-1 flex items-center gap-2">
+            <input type="text" id="invite-link" value="{{ invite_link }}" readonly
+              class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono" />
+            <button onclick="copyInviteLink()"
+              class="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all whitespace-nowrap">
+              <i class="fa-solid fa-copy mr-1"></i>复制
+            </button>
+          </div>
+        </div>
+        <p class="text-purple-300 text-xs mt-2">复制链接分享给好友，好友点击即可快速加入房间</p>
+      </div>
     </div>
 
     <!-- 玩家列表 -->
@@ -87,6 +103,50 @@
 </div>
 
 <script>
+// 复制邀请链接
+function copyInviteLink() {
+  const input = document.getElementById('invite-link');
+  input.select();
+  input.setSelectionRange(0, 99999); // 移动端兼容
+
+  if (navigator.clipboard && window.isSecureContext) {
+    // 使用现代 Clipboard API
+    navigator.clipboard.writeText(input.value).then(() => {
+      showCopyToast('链接已复制！');
+    }).catch(() => {
+      // 降级方案
+      fallbackCopy(input);
+    });
+  } else {
+    // 降级方案
+    fallbackCopy(input);
+  }
+}
+
+function fallbackCopy(input) {
+  try {
+    document.execCommand('copy');
+    showCopyToast('链接已复制！');
+  } catch (err) {
+    showCopyToast('复制失败，请手动复制');
+  }
+}
+
+function showCopyToast(message) {
+  // 创建提示元素
+  const toast = document.createElement('div');
+  toast.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // 2秒后移除
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+
 // 等待 HTMX 加载完成
 document.addEventListener('DOMContentLoaded', () => {
   const roomId = '{{ room.id }}';

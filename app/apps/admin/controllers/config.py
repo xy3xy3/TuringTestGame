@@ -80,6 +80,7 @@ async def config_page(request: Request) -> HTMLResponse:
     audit_actions = await config_service.get_audit_log_actions()
     backup_config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
+    base_url = await config_service.get_base_url()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
 
     context = {
@@ -92,6 +93,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "collections": collections,
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
+        "base_url": base_url,
     }
     await log_service.record_request(
         request,
@@ -113,6 +115,7 @@ async def config_save(
     smtp_pass: str = Form(""),
     smtp_from: str = Form(""),
     smtp_ssl: str = Form(""),
+    base_url: str = Form(""),
 ) -> HTMLResponse:
     """保存系统配置（SMTP + 日志策略 + 备份设置）。"""
     form_data = await request.form()
@@ -136,11 +139,13 @@ async def config_save(
     await config_service.save_smtp_config(smtp_payload)
     audit_actions = await config_service.save_audit_log_actions(selected_actions)
     await backup_service.save_backup_config(backup_payload)
+    await config_service.save_base_url(base_url)
     restart_scheduler()
 
     smtp = await config_service.get_smtp_config()
     backup_config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
+    base_url = await config_service.get_base_url()
     context = {
         **base_context(request),
         "smtp": smtp,
@@ -151,6 +156,7 @@ async def config_save(
         "collections": collections,
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
+        "base_url": base_url,
     }
     detail = (
         f"更新系统配置（tab={active_config_tab}，含备份参数），日志类型："

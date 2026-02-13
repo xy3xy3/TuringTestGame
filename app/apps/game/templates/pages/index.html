@@ -42,7 +42,7 @@
         <div class="space-y-4">
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间号</label>
-            <input type="text" name="room_code" class="input w-full" placeholder="输入房间号" required />
+            <input type="text" id="join-room-code" name="room_code" class="input w-full" placeholder="输入房间号" required />
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
@@ -50,7 +50,7 @@
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-            <input type="text" name="password" class="input w-full" placeholder="如果房间有密码" />
+            <input type="text" id="join-password" name="password" class="input w-full" placeholder="如果房间有密码" />
           </div>
           <button type="submit"
             class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
@@ -98,5 +98,37 @@
 
   validateNickname('create-form');
   validateNickname('join-form');
+
+  // 处理邀请链接参数
+  function handleInviteLink() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room');
+    const password = urlParams.get('pwd');
+
+    if (roomCode) {
+      // 自动填充房间号
+      const roomInput = document.getElementById('join-room-code');
+      if (roomInput) {
+        roomInput.value = roomCode;
+      }
+
+      // 自动填充密码（如果有）
+      const pwdInput = document.getElementById('join-password');
+      if (pwdInput && password) {
+        pwdInput.value = password;
+      }
+
+      // 如果有房间号，聚焦到昵称输入框
+      if (roomCode) {
+        const nicknameInput = document.querySelector('#join-form input[name="nickname"]');
+        if (nicknameInput) {
+          nicknameInput.focus();
+        }
+      }
+    }
+  }
+
+  // 页面加载时处理邀请链接
+  handleInviteLink();
 </script>
 {% endblock %}

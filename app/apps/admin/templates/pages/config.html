@@ -54,6 +54,11 @@
       </div>
 
       <div class="mt-4 grid gap-4 md:grid-cols-12">
+        <div class="md:col-span-12">
+          <label class="label">系统访问地址（Base URL）</label>
+          <input name="base_url" class="input" value="{{ base_url }}" placeholder="http://127.0.0.1:8000" {% if not config_perm['update'] %}readonly{% endif %} />
+          <p class="text-xs text-slate-500 mt-1">用于生成邀请链接等外部访问地址，如：http://your-domain.com:8000</p>
+        </div>
         <div class="md:col-span-8">
           <label class="label">SMTP 主机</label>
           <input name="smtp_host" class="input" value="{{ smtp.smtp_host }}" {% if not config_perm['update'] %}readonly{% endif %} />

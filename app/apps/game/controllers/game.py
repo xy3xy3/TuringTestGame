@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import game_room_service, game_manager, ai_chat_service, sse_manager
+from app.services import game_room_service, game_manager, ai_chat_service, sse_manager, config_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -32,7 +32,18 @@ def _get_player_from_cookie(request: Request) -> tuple[str, str] | None:
 @router.get("", response_class=HTMLResponse)
 async def game_index(request: Request) -> HTMLResponse:
     """游戏首页。"""
-    return templates.TemplateResponse("pages/index.html", {"request": request})
+    # 获取邀请链接参数
+    room_code = request.query_params.get("room", "")
+    password = request.query_params.get("pwd", "")
+
+    return templates.TemplateResponse(
+        "pages/index.html",
+        {
+            "request": request,
+            "invite_room_code": room_code,
+            "invite_password": password,
+        },
+    )
 
 
 @router.post("/create", response_class=HTMLResponse)
@@ -104,6 +115,13 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
         player_id, _ = player_info
         current_player = next((p for p in players if str(p.id) == player_id), None)
 
+    # 生成邀请链接
+    base_url = await config_service.get_base_url()
+    invite_params = f"?room={room.room_id}"
+    if room.password:
+        invite_params += f"&pwd={room.password}"
+    invite_link = f"{base_url}/game{invite_params}"
+
     return templates.TemplateResponse(
         "pages/room.html",
         {
@@ -111,6 +129,7 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
             "room": room,
             "players": players,
             "current_player": current_player,
+            "invite_link": invite_link,
         },
     )
 
