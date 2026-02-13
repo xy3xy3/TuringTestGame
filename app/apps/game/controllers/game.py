@@ -490,3 +490,46 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
             for p in players
         ],
     }
+
+
+@router.get("/api/{room_id}/round")
+async def get_current_round(room_id: str) -> dict[str, Any]:
+    """获取当前回合状态（API）。"""
+    from app.models.game_round import GameRound
+
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    if room.phase != "playing":
+        return {"success": False, "phase": room.phase, "error": "游戏未开始"}
+
+    # 获取当前回合
+    current_round = await GameRound.find_one({
+        "room_id": room_id,
+        "round_number": room.current_round,
+    })
+
+    if not current_round:
+        return {"success": False, "error": "回合不存在"}
+
+    # 获取玩家信息
+    players = await game_room_service.get_players_in_room(room.room_id)
+    interrogator = next((p for p in players if str(p.id) == current_round.interrogator_id), None)
+    subject = next((p for p in players if str(p.id) == current_round.subject_id), None)
+
+    return {
+        "success": True,
+        "round": {
+            "id": str(current_round.id),
+            "round_number": current_round.round_number,
+            "status": current_round.status,
+            "question": current_round.question,
+            "answer": current_round.answer,
+            "answer_type": current_round.answer_type,
+            "interrogator_id": current_round.interrogator_id,
+            "interrogator_nickname": interrogator.nickname if interrogator else "未知",
+            "subject_id": current_round.subject_id,
+            "subject_nickname": subject.nickname if subject else "未知",
+        },
+    }

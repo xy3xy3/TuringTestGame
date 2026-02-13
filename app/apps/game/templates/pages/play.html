@@ -165,6 +165,17 @@ function connectSSE() {
     document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
     document.getElementById('subject-name').textContent = data.subject_nickname;
     document.getElementById('subject-avatar').textContent = data.subject_nickname[0];
+
+    // 更新角色状态
+    isCurrentInterrogator = (data.interrogator_nickname === myNickname);
+    isCurrentSubject = (data.subject_nickname === myNickname);
+
+    // 重置显示
+    document.getElementById('question-text').textContent = '等待提问...';
+    document.getElementById('answer-text').textContent = '等待回答...';
+    document.getElementById('answer-content').classList.add('hidden');
+    document.getElementById('loading-area').classList.add('hidden');
+
     updatePhaseDisplay('questioning');
   });
 
@@ -219,7 +230,7 @@ function updatePhaseDisplay(phase) {
     'revealed': '结果揭晓'
   };
   document.getElementById('phase-display').textContent = phaseNames[phase] || phase;
-  
+
   // 显示/隐藏操作区域
   document.getElementById('question-input-area').classList.add('hidden');
   document.getElementById('answer-choice-area').classList.add('hidden');
@@ -228,11 +239,27 @@ function updatePhaseDisplay(phase) {
   document.getElementById('wait-area').classList.add('hidden');
 
   if (phase === 'questioning') {
-    document.getElementById('question-input-area').classList.remove('hidden');
+    if (isCurrentInterrogator) {
+      document.getElementById('question-input-area').classList.remove('hidden');
+    } else {
+      document.getElementById('wait-area').classList.remove('hidden');
+      document.getElementById('wait-area').querySelector('p').textContent = '等待提问者提问...';
+    }
   } else if (phase === 'answering') {
-    document.getElementById('answer-choice-area').classList.remove('hidden');
+    if (isCurrentSubject) {
+      document.getElementById('answer-choice-area').classList.remove('hidden');
+    } else {
+      document.getElementById('wait-area').classList.remove('hidden');
+      document.getElementById('wait-area').querySelector('p').textContent = '等待被测者回答...';
+    }
   } else if (phase === 'voting') {
-    document.getElementById('vote-area').classList.remove('hidden');
+    // 被测者不能投票
+    if (isCurrentSubject) {
+      document.getElementById('wait-area').classList.remove('hidden');
+      document.getElementById('wait-area').querySelector('p').textContent = '你是被测者，等待投票结果...';
+    } else {
+      document.getElementById('vote-area').classList.remove('hidden');
+    }
   } else if (phase === 'revealed') {
     document.getElementById('wait-area').classList.remove('hidden');
     document.getElementById('wait-area').querySelector('p').textContent = '结果已揭晓，等待下一轮...';
@@ -305,7 +332,68 @@ async function submitVote(vote) {
   document.getElementById('wait-area').querySelector('p').textContent = '已投票，等待其他玩家...';
 }
 
-// 页面加载时连接 SSE
-connectSSE();
+// 当前玩家角色
+let isCurrentInterrogator = false;
+let isCurrentSubject = false;
+let myNickname = '';
+
+// 页面加载时获取当前回合状态（用于刷新页面后恢复状态）
+async function initGameState() {
+  try {
+    // 先获取房间状态以确定当前玩家昵称
+    const roomRes = await fetch(`/game/api/${roomId}/state`);
+    const roomData = await roomRes.json();
+
+    if (roomData.success && roomData.players) {
+      const me = roomData.players.find(p => p.id === playerId);
+      if (me) {
+        myNickname = me.nickname;
+      }
+    }
+
+    // 获取当前回合
+    const res = await fetch(`/game/api/${roomId}/round`);
+    const data = await res.json();
+
+    if (data.success && data.round) {
+      const round = data.round;
+      currentRoundId = round.id;
+      currentRound = round.round_number;
+
+      // 更新显示
+      document.getElementById('round-number').textContent = round.round_number;
+      document.getElementById('interrogator-name').textContent = round.interrogator_nickname;
+      document.getElementById('interrogator-avatar').textContent = round.interrogator_nickname[0];
+      document.getElementById('subject-name').textContent = round.subject_nickname;
+      document.getElementById('subject-avatar').textContent = round.subject_nickname[0];
+
+      // 判断当前玩家角色
+      isCurrentInterrogator = (round.interrogator_nickname === myNickname);
+      isCurrentSubject = (round.subject_nickname === myNickname);
+
+      // 更新问题和回答显示
+      if (round.question) {
+        document.getElementById('question-text').textContent = round.question;
+      }
+
+      if (round.answer) {
+        document.getElementById('loading-area').classList.add('hidden');
+        document.getElementById('answer-content').classList.remove('hidden');
+        document.getElementById('answer-text').textContent = round.answer;
+        document.getElementById('answer-type-label').textContent = round.answer_type === 'ai' ? '（AI 代答）' : '（真人回答）';
+      }
+
+      // 根据状态更新阶段显示
+      updatePhaseDisplay(round.status);
+    }
+  } catch (e) {
+    console.error('Failed to init game state:', e);
+  }
+}
+
+// 页面加载时先获取状态，再连接 SSE
+initGameState().then(() => {
+  connectSSE();
+});
 </script>
 {% endblock %}

@@ -165,6 +165,7 @@ class GameManager:
     
         # 通知所有玩家
         await sse_manager.publish(room_id, "new_round", {
+            "round_id": str(game_round.id),
             "round_number": 1,
             "interrogator_id": str(interrogator.id),
             "interrogator_nickname": interrogator.nickname,
@@ -607,6 +608,7 @@ class GameManager:
     
         # 通知所有玩家
         await sse_manager.publish(room_id, "new_round", {
+            "round_id": str(game_round.id),
             "round_number": room.current_round,
             "interrogator_id": str(interrogator.id),
             "interrogator_nickname": interrogator.nickname,
