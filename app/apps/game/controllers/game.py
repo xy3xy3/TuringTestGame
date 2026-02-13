@@ -263,9 +263,14 @@ async def set_ready(request: Request, room_id: str) -> dict[str, Any]:
 
     result = await game_room_service.set_player_ready(room_id, player_id, is_ready)
 
-    if result["success"] and result["all_ready"]:
-        # 所有人准备好了，开始游戏
-        await game_manager.start_game(room_id)
+    if result["success"]:
+        # 添加当前玩家的准备状态到响应中
+        result["player_id"] = player_id
+        result["player_is_ready"] = is_ready
+
+        if result["all_ready"]:
+            # 所有人准备好了，开始游戏
+            await game_manager.start_game(room_id)
 
     return result
 
@@ -454,7 +459,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
                 "nickname": p.nickname,
                 "is_owner": p.is_owner,
                 "is_ready": p.is_ready,
-                "score": p.score or 0,
+                "score": p.total_score or 0,
             }
             for p in players
         ],
