@@ -425,6 +425,7 @@ async def test_chat(request: Request) -> dict[str, Any]:
     data = await request.json()
     system_prompt = data.get("system_prompt", "")
     message = data.get("message", "")
+    model_id = data.get("model_id")
 
     if not system_prompt or not message:
         return {"success": False, "error": "缺少必要参数"}
@@ -432,6 +433,7 @@ async def test_chat(request: Request) -> dict[str, Any]:
     result = await ai_chat_service.call_ai(
         system_prompt=system_prompt,
         user_message=message,
+        model_id=model_id,
     )
 
     if result["success"]:

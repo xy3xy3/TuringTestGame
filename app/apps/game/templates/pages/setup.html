@@ -39,7 +39,7 @@
             <label class="block text-sm text-purple-200 mb-1">选择 AI 模型</label>
             <select name="ai_model_id" class="input w-full">
               {% for model in ai_models %}
-              <option value="{{ model.id }}" {% if player.ai_model_id == model.id|string %}selected{% endif %}>
+              <option value="{{ model.id|string }}" {% if player.ai_model_id == model.id|string %}selected{% endif %}>
                 {{ model.name }} - {{ model.model_name }}
               </option>
               {% endfor %}
@@ -123,9 +123,10 @@ async function sendTestMessage() {
   const message = input.value.trim();
   if (!message) return;
 
-  // 获取当前系统提示词
+  // 获取当前系统提示词和选择的 AI 模型
   const form = document.getElementById('setup-form');
   systemPrompt = form.querySelector('textarea[name="system_prompt"]').value;
+  const aiModelId = form.querySelector('select[name="ai_model_id"]').value;
 
   if (!systemPrompt) {
     alert('请先填写系统提示词');
@@ -143,13 +144,20 @@ async function sendTestMessage() {
   chatArea.innerHTML += `<div class="text-center text-purple-300 text-sm">AI 正在思考...</div>`;
   chatArea.scrollTop = chatArea.scrollHeight;
 
+  const requestBody = {
+    system_prompt: systemPrompt,
+    message: message,
+  };
+
+  // 如果选择了 AI 模型，也传递模型 ID
+  if (aiModelId) {
+    requestBody.model_id = aiModelId;
+  }
+
   const response = await fetch('/game/api/chat', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      system_prompt: systemPrompt,
-      message: message,
-    })
+    body: JSON.stringify(requestBody)
   });
 
   const result = await response.json();

@@ -40,7 +40,7 @@ async def call_ai(
     Args:
         system_prompt: 系统提示词（玩家的"灵魂"设定）
         user_message: 用户消息（提问者的问题）
-        model_id: 可选的模型 ID，如果不提供则使用默认模型
+        model_id: 可选的模型 ID，如果不提供则使用默认模型或第一个启用的模型
 
     Returns:
         {"success": True, "content": "AI 的回答"}
@@ -49,12 +49,19 @@ async def call_ai(
     """
     # 获取模型配置
     model_config: AIModel | None = None
-    
+
     if model_id:
         model_config = await get_model_by_id(model_id)
     else:
+        # 尝试获取默认模型
         model_config = await get_default_model()
-    
+
+        # 如果没有默认模型，使用第一个启用的模型
+        if not model_config:
+            enabled_models = await get_enabled_models()
+            if enabled_models:
+                model_config = enabled_models[0]
+
     if not model_config:
         return {"success": False, "error": "没有可用的 AI 模型"}
 
