@@ -87,11 +87,11 @@ async def create_room(
     game_config = GameConfig(
         min_players=min_players,
         max_players=max_players,
-        total_rounds=total_rounds,
-        setup_time=setup_time,
-        question_time=question_time,
-        answer_time=answer_time,
-        vote_time=vote_time,
+        rounds_per_game=total_rounds,
+        setup_duration=setup_time,
+        question_duration=question_time,
+        answer_duration=answer_time,
+        vote_duration=vote_time,
     )
 
     # 创建房间（先创建，获取 room id 后再创建玩家）
@@ -102,6 +102,7 @@ async def create_room(
         config=game_config,
         phase="waiting",
         current_round=0,
+        total_rounds=total_rounds,
     )
     await room.insert()
 
