@@ -23,6 +23,7 @@ from .db import close_db, init_db
 from .middleware.auth import AdminAuthMiddleware
 from .services.auth_service import ensure_default_admin
 from .services.backup_scheduler import start_scheduler, stop_scheduler
+from .services.cleanup_service import start_cleanup_scheduler, stop_cleanup_scheduler
 from .services.role_service import ensure_default_roles
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -60,10 +61,12 @@ async def on_startup() -> None:
     await ensure_default_roles()
     await ensure_default_admin()
     start_scheduler()
+    start_cleanup_scheduler()
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     """应用停止时关闭备份调度器与数据库连接。"""
     stop_scheduler()
+    stop_cleanup_scheduler()
     await close_db()

@@ -9,8 +9,9 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import backup_service, config_service, log_service, permission_decorator
+from app.services import backup_service, config_service, log_service, permission_decorator, cleanup_service
 from app.services.backup_scheduler import restart_scheduler
+from app.services.cleanup_service import restart_cleanup_scheduler
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -79,8 +80,8 @@ async def config_page(request: Request) -> HTMLResponse:
     smtp = await config_service.get_smtp_config()
     audit_actions = await config_service.get_audit_log_actions()
     backup_config = await backup_service.get_backup_config()
-    collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
+    cleanup_config = await cleanup_service.get_cleanup_config()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
 
     context = {
@@ -94,6 +95,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
         "base_url": base_url,
+        "cleanup_config": cleanup_config,
     }
     await log_service.record_request(
         request,
@@ -140,12 +142,25 @@ async def config_save(
     audit_actions = await config_service.save_audit_log_actions(selected_actions)
     await backup_service.save_backup_config(backup_payload)
     await config_service.save_base_url(base_url)
+
+    # 保存清理配置
+    cleanup_enabled = form_data.get("cleanup_enabled") == "on"
+    cleanup_retention_days = int(form_data.get("cleanup_retention_days", "7") or "7")
+    cleanup_interval_hours = int(form_data.get("cleanup_interval_hours", "24") or "24")
+    await cleanup_service.save_cleanup_config(
+        enabled=cleanup_enabled,
+        retention_days=cleanup_retention_days,
+        interval_hours=cleanup_interval_hours,
+    )
+    restart_cleanup_scheduler()
+
     restart_scheduler()
 
     smtp = await config_service.get_smtp_config()
     backup_config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
+    cleanup_config = await config_service.get_cleanup_config()
     context = {
         **base_context(request),
         "smtp": smtp,
@@ -157,6 +172,7 @@ async def config_save(
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
         "base_url": base_url,
+        "cleanup_config": cleanup_config,
     }
     detail = (
         f"更新系统配置（tab={active_config_tab}，含备份参数），日志类型："

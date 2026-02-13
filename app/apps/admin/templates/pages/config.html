@@ -11,7 +11,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-lg font-semibold text-slate-900">系统配置</h1>
-          <p class="text-sm text-slate-500">按页签切换：系统设置 / 备份设置</p>
+          <p class="text-sm text-slate-500">按页签切换：系统设置 / 备份设置 / 数据清理</p>
         </div>
 
         <div class="inline-flex rounded-md border border-slate-200 bg-white p-1">
@@ -30,6 +30,14 @@
             x-on:click="configTab = 'backup'"
           >
             备份设置
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="configTab === 'cleanup' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="configTab = 'cleanup'"
+          >
+            数据清理
           </button>
         </div>
       </div>
@@ -379,6 +387,70 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="card p-5" x-show="configTab === 'cleanup'" x-cloak>
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-slate-900">游戏数据清理</h2>
+          <p class="text-sm text-slate-500">自动清理已结束的游戏数据，释放存储空间</p>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-12">
+        <div class="md:col-span-4">
+          <label class="label">自动清理</label>
+          <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              name="cleanup_enabled"
+              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              {% if cleanup_config.enabled %}checked{% endif %}
+              {% if not config_perm['update'] %}disabled{% endif %}
+            />
+            <span>启用自动清理</span>
+          </label>
+          <p class="text-xs text-slate-500 mt-1">关闭后不会自动清理任何数据</p>
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">数据保留天数</label>
+          <input
+            name="cleanup_retention_days"
+            type="number"
+            min="1"
+            max="365"
+            class="input"
+            value="{{ cleanup_config.retention_days }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">已结束的游戏数据保留天数（默认7天）</p>
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">清理间隔（小时）</label>
+          <input
+            name="cleanup_interval_hours"
+            type="number"
+            min="1"
+            max="168"
+            class="input"
+            value="{{ cleanup_config.interval_hours }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">自动清理的执行间隔（默认24小时）</p>
+        </div>
+      </div>
+
+      <div class="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <h3 class="text-sm font-semibold text-amber-800 mb-2">
+          <i class="fa-solid fa-triangle-exclamation mr-1"></i>清理说明
+        </h3>
+        <ul class="text-sm text-amber-700 space-y-1 ml-5 list-disc">
+          <li>仅清理状态为"已结束"的游戏房间数据</li>
+          <li>清理时会同时删除关联的玩家、回合和投票记录</li>
+          <li>进行中的游戏数据不会被清理</li>
+          <li>清理操作不可恢复，请确保已开启备份功能</li>
+        </ul>
       </div>
     </section>
 
