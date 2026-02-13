@@ -12,7 +12,7 @@ from app.models.ai_model import AIModel
 
 async def get_enabled_models() -> list[AIModel]:
     """获取所有启用的 AI 模型。"""
-    return await AIModel.find_all({"is_enabled": True}).to_list()
+    return await AIModel.find({"is_enabled": True}).to_list()
 
 
 async def get_model_by_id(model_id: str) -> AIModel | None:
