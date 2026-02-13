@@ -294,13 +294,14 @@ function updatePhaseDisplay(phase) {
   }
 }
 
-function updateScoreBoard(scores) {
+function updateScoreBoard(playerScores) {
   const board = document.getElementById('score-board');
   board.innerHTML = '';
-  for (const [id, score] of Object.entries(scores)) {
+  // playerScores 是数组格式：[{id, nickname, score}, ...]
+  for (const player of playerScores) {
     const badge = document.createElement('span');
     badge.className = 'px-3 py-1 bg-white/10 rounded-full text-white text-sm';
-    badge.textContent = `${id}: ${score}分`;
+    badge.textContent = `${player.nickname}: ${player.score}分`;
     board.appendChild(badge);
   }
 }

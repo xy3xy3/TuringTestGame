@@ -531,6 +531,15 @@ class GameManager:
             await vote.save()
 
         # 通知结果
+        # 构建玩家得分信息（包含昵称）
+        player_scores_list = [
+            {
+                "id": str(p.id),
+                "nickname": p.nickname,
+                "score": p.total_score
+            }
+            for p in players
+        ]
         await sse_manager.publish(room_id, "round_result", {
             "round_number": game_round.round_number,
             "subject_choice": game_round.answer_type,
@@ -538,7 +547,7 @@ class GameManager:
             "answer": game_round.answer,
             "votes": vote_stats,
             "scores": scores,
-            "player_scores": {str(p.id): p.total_score for p in players},
+            "player_scores": player_scores_list,
         })
 
         # 等待几秒后开始下一轮
