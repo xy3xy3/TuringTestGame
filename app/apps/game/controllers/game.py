@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import game_room_service, game_manager, ai_chat_service
+from app.services import game_room_service, game_manager, ai_chat_service, sse_manager
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -281,7 +281,7 @@ async def kick_player(request: Request, room_id: str, player_id: str) -> dict[st
 
     if result["success"]:
         # 通知其他玩家
-        await game_manager.sse_manager.publish(room_id, "player_kicked", {
+        await sse_manager.publish(room_id, "player_kicked", {
             "player_id": player_id,
         })
 
@@ -364,7 +364,7 @@ async def sse_events(request: Request, room_id: str):
     """SSE 事件流。"""
 
     async def event_generator():
-        queue = game_manager.sse_manager.subscribe(room_id)
+        queue = sse_manager.subscribe(room_id)
         try:
             while True:
                 message = await queue.get()
@@ -372,7 +372,7 @@ async def sse_events(request: Request, room_id: str):
         except asyncio.CancelledError:
             pass
         finally:
-            game_manager.sse_manager.unsubscribe(room_id, queue)
+            sse_manager.unsubscribe(room_id, queue)
 
     import asyncio
     return StreamingResponse(event_generator(), media_type="text/event-stream")

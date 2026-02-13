@@ -18,8 +18,9 @@ from app.services import (
     validators,
 )
 
-# 导出游戏管理器实例
+# 导出游戏管理器和 SSE 管理器实例
 game_manager = game_manager_module.game_manager
+sse_manager = game_manager_module.sse_manager
 
 __all__ = [
     "admin_user_service",
@@ -36,5 +37,6 @@ __all__ = [
     "permission_decorator",
     "permission_service",
     "role_service",
+    "sse_manager",
     "validators",
 ]
