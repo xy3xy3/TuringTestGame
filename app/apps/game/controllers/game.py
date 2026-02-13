@@ -101,12 +101,20 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
     # 使用房间的 room_id（6位码）来查询玩家
     players = await game_room_service.get_players_in_room(room.room_id)
 
+    # 获取当前玩家信息
+    player_info = _get_player_from_cookie(request)
+    current_player = None
+    if player_info:
+        player_id, _ = player_info
+        current_player = next((p for p in players if str(p.id) == player_id), None)
+
     return templates.TemplateResponse(
         "pages/room.html",
         {
             "request": request,
             "room": room,
             "players": players,
+            "current_player": current_player,
         },
     )
 
@@ -368,7 +376,12 @@ async def sse_events(request: Request, room_id: str):
         try:
             while True:
                 message = await queue.get()
-                yield f"{message}\n\n"
+                # message 是 JSON 字符串，格式：{"event": "player_ready_changed", "data": {...}}
+                # 解析为标准 SSE 格式
+                parsed = json.loads(message)
+                event_name = parsed.get("event", "")
+                event_data = json.dumps(parsed.get("data", {}))
+                yield f"event: {event_name}\ndata: {event_data}\n\n"
         except asyncio.CancelledError:
             pass
         finally:

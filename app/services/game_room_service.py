@@ -182,6 +182,13 @@ async def join_room(
     room.player_ids.append(str(player.id))
     await room.save()
 
+    # 通知所有玩家有新玩家加入
+    from app.services.game_manager import sse_manager
+    await sse_manager.publish(str(room.id), "player_joined", {
+        "player_id": str(player.id),
+        "nickname": player.nickname,
+    })
+
     return {
         "success": True,
         "room": room,
@@ -239,7 +246,7 @@ async def set_player_ready(room_id: str, player_id: str, is_ready: bool) -> dict
 
     # 通知所有玩家准备状态已变更
     from app.services.game_manager import sse_manager
-    await sse_manager.publish(room_id, "player_ready_changed", {
+    await sse_manager.publish(str(room.id), "player_ready_changed", {
         "player_id": player_id,
         "is_ready": is_ready,
         "all_ready": all_ready,
@@ -276,6 +283,12 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
 
     # 否则只删除玩家
     await player.delete()
+
+    # 通知所有玩家有玩家离开
+    from app.services.game_manager import sse_manager
+    await sse_manager.publish(str(room.id), "player_left", {
+        "player_id": player_id,
+    })
 
     # 检查是否还有其他玩家
     remaining = await GamePlayer.find({"room_id": room.room_id}).count()

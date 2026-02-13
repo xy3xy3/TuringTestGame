@@ -52,10 +52,11 @@
         id="ready-btn"
         class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500"
         hx-post="/game/{{ room.id }}/ready"
-        hx-vals='{"is_ready": "true"}'
+        hx-vals='{"is_ready": "{{ "false" if current_player and current_player.is_ready else "true" }}"}'
         hx-target="#ready-result"
+        hx-on::after-swap="htmx.ajax('GET', '/game/{{ room.id }}/players', {target: '#player-list', swap: 'outerHTML'})"
       >
-        准备
+        {% if current_player and current_player.is_ready %}取消准备{% else %}准备{% endif %}
       </button>
       <button
         id="start-btn"
@@ -85,29 +86,89 @@
 </div>
 
 <script>
-const roomId = '{{ room.id }}';
+// 等待 HTMX 加载完成
+document.addEventListener('DOMContentLoaded', () => {
+  const roomId = '{{ room.id }}';
+  console.log('Room ID:', roomId);
 
-// SSE 连接
-const eventSource = new EventSource(`/game/${roomId}/events`);
+  // 获取当前玩家 ID（从 Cookie 中读取）
+  function getCurrentPlayerId() {
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name === 'player_id') {
+        return value;
+      }
+    }
+    return null;
+  }
 
-eventSource.addEventListener('player_joined', (e) => {
-  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+  // 更新准备按钮状态
+  function updateReadyButton() {
+    const readyBtn = document.getElementById('ready-btn');
+    const currentPlayerId = getCurrentPlayerId();
+
+    if (!currentPlayerId) return;
+
+    // 通过 fetch 获取房间状态
+    fetch(`/game/api/${roomId}/state`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.players) {
+          const currentPlayer = data.players.find(p => p.id === currentPlayerId);
+          if (currentPlayer) {
+            const isReady = currentPlayer.is_ready;
+            // 更新按钮文字和点击值
+            readyBtn.textContent = isReady ? '取消准备' : '准备';
+            readyBtn.setAttribute('hx-vals', `{"is_ready": "${!isReady}"}`);
+          }
+        }
+      })
+      .catch(e => console.error('Failed to fetch room state:', e));
+  }
+
+  // 监听 HTMX 请求完成，更新准备按钮
+  document.body.addEventListener('htmx:afterSwap', (event) => {
+    if (event.target.id === 'ready-result') {
+      updateReadyButton();
+    }
+  });
+
+  // SSE 连接
+  const eventSource = new EventSource(`/game/${roomId}/events`);
+
+  eventSource.addEventListener('open', () => {
+    console.log('SSE connection opened');
+  });
+
+  eventSource.addEventListener('player_joined', (e) => {
+    console.log('SSE event: player_joined', e.data);
+    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+  });
+
+  eventSource.addEventListener('player_left', (e) => {
+    console.log('SSE event: player_left', e.data);
+    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+  });
+
+  eventSource.addEventListener('player_ready_changed', (e) => {
+    console.log('SSE event: player_ready_changed', e.data);
+    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    // 更新准备按钮状态
+    updateReadyButton();
+  });
+
+  eventSource.addEventListener('game_starting', (e) => {
+    console.log('SSE event: game_starting', e.data);
+    window.location.href = `/game/${roomId}/setup`;
+  });
+
+  eventSource.onerror = (e) => {
+    console.log('SSE connection error', e);
+  };
+
+  // 初始化
+  updateReadyButton();
 });
-
-eventSource.addEventListener('player_left', (e) => {
-  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
-});
-
-eventSource.addEventListener('player_ready_changed', (e) => {
-  htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
-});
-
-eventSource.addEventListener('game_starting', (e) => {
-  window.location.href = `/game/${roomId}/setup`;
-});
-
-eventSource.onerror = () => {
-  console.log('SSE connection error');
-};
 </script>
 {% endblock %}
