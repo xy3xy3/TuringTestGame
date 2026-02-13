@@ -418,6 +418,11 @@ async function submitQuestion() {
   const question = input.value.trim();
   if (!question) return;
 
+  // 立即隐藏提问输入区域，防止重复点击
+  document.getElementById('question-input-area').classList.add('hidden');
+  document.getElementById('wait-area').classList.remove('hidden');
+  document.getElementById('wait-area').querySelector('p').textContent = '已提交问题，等待被测者回答...';
+
   await fetch(`/game/${roomId}/question`, {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
