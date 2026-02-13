@@ -153,7 +153,7 @@ async def join_room(
         return {"success": False, "error": "房间密码错误"}
 
     # 检查房间是否已满
-    player_count = await GamePlayer.find_one({"room_id": str(room.id)}).count()
+    player_count = await GamePlayer.find({"room_id": room.room_id}).count()
     if player_count >= room.config.max_players:
         return {"success": False, "error": "房间已满"}
 
@@ -162,21 +162,25 @@ async def join_room(
         return {"success": False, "error": "游戏已开始，无法加入"}
 
     # 检查昵称是否已存在
-    existing = await GamePlayer.find_one({"room_id": str(room.id), "nickname": nickname})
+    existing = await GamePlayer.find_one({"room_id": room.room_id, "nickname": nickname})
     if existing:
         return {"success": False, "error": "昵称已被使用"}
 
     # 创建玩家
     player_token = generate_player_token()
     player = GamePlayer(
-        room_id=str(room.id),
+        room_id=room.room_id,
         nickname=nickname,
         token=player_token,
         is_owner=False,
         is_ready=False,
-        phase=PlayerPhase.WAITING,
+        phase="waiting",
     )
     await player.insert()
+
+    # 将玩家加入房间列表
+    room.player_ids.append(str(player.id))
+    await room.save()
 
     return {
         "success": True,
