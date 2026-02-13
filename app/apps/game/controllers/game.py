@@ -504,9 +504,9 @@ async def get_current_round(room_id: str) -> dict[str, Any]:
     if room.phase != "playing":
         return {"success": False, "phase": room.phase, "error": "游戏未开始"}
 
-    # 获取当前回合
+    # 获取当前回合（使用 6 位房间码查询）
     current_round = await GameRound.find_one({
-        "room_id": room_id,
+        "room_id": room.room_id,
         "round_number": room.current_round,
     })
 

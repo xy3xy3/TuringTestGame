@@ -132,11 +132,6 @@ class GameManager:
         if not room:
             return
 
-        # 通知所有玩家游戏开始，跳转到 play 页面
-        await sse_manager.publish(room_id, "game_playing", {
-            "room_id": room_id,
-        })
-
         players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < 2:
             await sse_manager.publish(room_id, "game_error", {"error": "玩家数不足"})
@@ -147,24 +142,25 @@ class GameManager:
         room.phase = "playing"
         room.current_round = 1
         await room.save()
-    
+
         # 随机选择提问者和被测者
         random.shuffle(players)
         interrogator = players[0]
         subject = players[1]
-    
-        # 创建回合记录
+
+        # 创建回合记录（使用 6 位房间码 room_id，而非 MongoDB ObjectId）
         game_round = GameRound(
-            room_id=room_id,
+            room_id=room.room_id,
             round_number=1,
             interrogator_id=str(interrogator.id),
             subject_id=str(subject.id),
             status="questioning",
         )
         await game_round.insert()
-    
-        # 通知所有玩家
-        await sse_manager.publish(room_id, "new_round", {
+
+        # 通知所有玩家游戏开始（包含回合信息，前端收到后直接跳转并显示）
+        await sse_manager.publish(room_id, "game_start", {
+            "room_id": room_id,
             "round_id": str(game_round.id),
             "round_number": 1,
             "interrogator_id": str(interrogator.id),
@@ -598,7 +594,7 @@ class GameManager:
     
         # 创建回合记录
         game_round = GameRound(
-            room_id=room_id,
+            room_id=room.room_id,
             round_number=room.current_round,
             interrogator_id=str(interrogator.id),
             subject_id=str(subject.id),

@@ -113,11 +113,8 @@ function updateCountdown() {
   if (remaining <= 0 && !hasNavigated) {
     hasNavigated = true;
     clearInterval(timerInterval);
-    // 给后端一点时间发送 game_playing 事件，但如果没收到也自动跳转
-    setTimeout(() => {
-      if (!hasNavigated) return;
-      window.location.href = `/game/${roomId}/play`;
-    }, 2000);
+    // 倒计时结束，强制跳转到游戏页面
+    window.location.href = `/game/${roomId}/play`;
   }
 }
 
@@ -181,8 +178,8 @@ eventSource.addEventListener('countdown', (e) => {
   }
 });
 
-// 监听游戏进行事件（后端统一控制跳转）
-eventSource.addEventListener('game_playing', (e) => {
+// 监听游戏开始事件（后端统一控制跳转）
+eventSource.addEventListener('game_start', (e) => {
   if (hasNavigated) return;
   hasNavigated = true;
   if (timerInterval) clearInterval(timerInterval);

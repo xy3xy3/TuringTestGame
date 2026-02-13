@@ -155,7 +155,32 @@ let eventSource = null;
 
 function connectSSE() {
   eventSource = new EventSource(`/game/${roomId}/events`);
-  
+
+  // 游戏开始事件（第一回合）
+  eventSource.addEventListener('game_start', (e) => {
+    const data = JSON.parse(e.data);
+    currentRound = data.round_number;
+    currentRoundId = data.round_id || '';
+    document.getElementById('round-number').textContent = data.round_number;
+    document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
+    document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
+    document.getElementById('subject-name').textContent = data.subject_nickname;
+    document.getElementById('subject-avatar').textContent = data.subject_nickname[0];
+
+    // 更新角色状态
+    isCurrentInterrogator = (data.interrogator_nickname === myNickname);
+    isCurrentSubject = (data.subject_nickname === myNickname);
+
+    // 重置显示
+    document.getElementById('question-text').textContent = '等待提问...';
+    document.getElementById('answer-text').textContent = '等待回答...';
+    document.getElementById('answer-content').classList.add('hidden');
+    document.getElementById('loading-area').classList.add('hidden');
+
+    updatePhaseDisplay('questioning');
+  });
+
+  // 新回合事件（后续轮次）
   eventSource.addEventListener('new_round', (e) => {
     const data = JSON.parse(e.data);
     currentRound = data.round_number;
@@ -340,20 +365,27 @@ let myNickname = '';
 // 页面加载时获取当前回合状态（用于刷新页面后恢复状态）
 async function initGameState() {
   try {
+    console.log('Initializing game state...');
+
     // 先获取房间状态以确定当前玩家昵称
     const roomRes = await fetch(`/game/api/${roomId}/state`);
     const roomData = await roomRes.json();
+    console.log('Room state:', roomData);
 
     if (roomData.success && roomData.players) {
       const me = roomData.players.find(p => p.id === playerId);
       if (me) {
         myNickname = me.nickname;
+        console.log('My nickname:', myNickname);
+      } else {
+        console.warn('Player not found in room');
       }
     }
 
     // 获取当前回合
     const res = await fetch(`/game/api/${roomId}/round`);
     const data = await res.json();
+    console.log('Round data:', data);
 
     if (data.success && data.round) {
       const round = data.round;
@@ -370,6 +402,7 @@ async function initGameState() {
       // 判断当前玩家角色
       isCurrentInterrogator = (round.interrogator_nickname === myNickname);
       isCurrentSubject = (round.subject_nickname === myNickname);
+      console.log('Role - Interrogator:', isCurrentInterrogator, 'Subject:', isCurrentSubject);
 
       // 更新问题和回答显示
       if (round.question) {
@@ -385,6 +418,10 @@ async function initGameState() {
 
       // 根据状态更新阶段显示
       updatePhaseDisplay(round.status);
+    } else {
+      console.warn('No round data available:', data.error || 'Unknown error');
+      // 显示等待信息
+      document.getElementById('phase-display').textContent = '等待游戏开始...';
     }
   } catch (e) {
     console.error('Failed to init game state:', e);
