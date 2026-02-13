@@ -219,12 +219,12 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
     )
 
 
-@router.post("/{room_id}/setup")
-async def submit_setup(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/setup", response_class=HTMLResponse)
+async def submit_setup(request: Request, room_id: str) -> HTMLResponse:
     """提交灵魂注入设置。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     player_id, _ = player_info
 
@@ -233,7 +233,7 @@ async def submit_setup(request: Request, room_id: str) -> dict[str, Any]:
     ai_model_id = str(form_data.get("ai_model_id", "")).strip()
 
     if not system_prompt:
-        return {"success": False, "error": "请输入系统提示词"}
+        return HTMLResponse(content='<div class="text-red-400">请输入系统提示词</div>')
 
     result = await game_room_service.update_player_setup(
         room_id=room_id,
@@ -242,7 +242,9 @@ async def submit_setup(request: Request, room_id: str) -> dict[str, Any]:
         ai_model_id=ai_model_id,
     )
 
-    return result
+    if result["success"]:
+        return HTMLResponse(content='<div class="text-green-400">设置已保存</div>')
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "设置失败")}</div>')
 
 
 @router.post("/{room_id}/ready", response_class=HTMLResponse)
@@ -278,12 +280,12 @@ async def start_game(room_id: str) -> HTMLResponse:
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
 
 
-@router.post("/{room_id}/kick/{player_id}")
-async def kick_player(request: Request, room_id: str, player_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/kick/{player_id}", response_class=HTMLResponse)
+async def kick_player(request: Request, room_id: str, player_id: str) -> HTMLResponse:
     """踢出玩家（房主操作）。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     requester_id, _ = player_info
 
@@ -294,16 +296,17 @@ async def kick_player(request: Request, room_id: str, player_id: str) -> dict[st
         await sse_manager.publish(room_id, "player_kicked", {
             "player_id": player_id,
         })
+        return HTMLResponse(content='<div class="text-green-400">已踢出玩家</div>')
 
-    return result
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "踢出失败")}</div>')
 
 
-@router.post("/{room_id}/question")
-async def submit_question(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/question", response_class=HTMLResponse)
+async def submit_question(request: Request, room_id: str) -> HTMLResponse:
     """提交问题。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     player_id, _ = player_info
 
@@ -312,17 +315,21 @@ async def submit_question(request: Request, room_id: str) -> dict[str, Any]:
     round_id = str(form_data.get("round_id", "")).strip()
 
     if not question:
-        return {"success": False, "error": "问题不能为空"}
+        return HTMLResponse(content='<div class="text-red-400">问题不能为空</div>')
 
-    return await game_manager.submit_question(room_id, round_id, player_id, question)
+    result = await game_manager.submit_question(room_id, round_id, player_id, question)
+
+    if result["success"]:
+        return HTMLResponse(content='<div class="text-green-400">问题已提交</div>')
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "提交失败")}</div>')
 
 
-@router.post("/{room_id}/answer")
-async def submit_answer(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/answer", response_class=HTMLResponse)
+async def submit_answer(request: Request, room_id: str) -> HTMLResponse:
     """提交回答。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     player_id, _ = player_info
 
@@ -332,17 +339,21 @@ async def submit_answer(request: Request, room_id: str) -> dict[str, Any]:
     round_id = str(form_data.get("round_id", "")).strip()
 
     if answer_type not in ("human", "ai"):
-        return {"success": False, "error": "无效的回答类型"}
+        return HTMLResponse(content='<div class="text-red-400">无效的回答类型</div>')
 
-    return await game_manager.submit_answer(room_id, round_id, player_id, answer_type, answer_content)
+    result = await game_manager.submit_answer(room_id, round_id, player_id, answer_type, answer_content)
+
+    if result["success"]:
+        return HTMLResponse(content='<div class="text-green-400">回答已提交</div>')
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "提交失败")}</div>')
 
 
-@router.post("/{room_id}/vote")
-async def submit_vote(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/vote", response_class=HTMLResponse)
+async def submit_vote(request: Request, room_id: str) -> HTMLResponse:
     """提交投票。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     player_id, _ = player_info
 
@@ -351,9 +362,13 @@ async def submit_vote(request: Request, room_id: str) -> dict[str, Any]:
     round_id = str(form_data.get("round_id", "")).strip()
 
     if vote not in ("human", "ai", "skip"):
-        return {"success": False, "error": "无效的投票选项"}
+        return HTMLResponse(content='<div class="text-red-400">无效的投票选项</div>')
 
-    return await game_manager.submit_vote(room_id, round_id, player_id, vote)
+    result = await game_manager.submit_vote(room_id, round_id, player_id, vote)
+
+    if result["success"]:
+        return HTMLResponse(content='<div class="text-green-400">投票已提交</div>')
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "提交失败")}</div>')
 
 
 @router.post("/{room_id}/leave", response_class=HTMLResponse)
