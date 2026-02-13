@@ -117,8 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(res => res.json())
       .then(data => {
         if (data.success && data.players) {
+          // 注意：API 返回的 id 是字符串，Cookie 中的 player_id 也是字符串
           const currentPlayer = data.players.find(p => p.id === currentPlayerId);
-          if (currentPlayer) {
+          if (currentPlayer && readyBtn) {
             const isReady = currentPlayer.is_ready;
             // 更新按钮文字和点击值
             readyBtn.textContent = isReady ? '取消准备' : '准备';
@@ -147,11 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
       })
-      .catch(e => console.error('Failed to fetch room state:', e))
-      .finally(() => {
-        // 刷新玩家列表
-        htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
-      });
+      .catch(e => console.error('Failed to fetch room state:', e));
   };
 
   // SSE 连接
@@ -164,11 +161,15 @@ document.addEventListener('DOMContentLoaded', () => {
   eventSource.addEventListener('player_joined', (e) => {
     console.log('SSE event: player_joined', e.data);
     htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
+    window.updateReadyButtonState();
   });
 
   eventSource.addEventListener('player_left', (e) => {
     console.log('SSE event: player_left', e.data);
     htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
+    window.updateReadyButtonState();
   });
 
   eventSource.addEventListener('player_ready_changed', (e) => {
