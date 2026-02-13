@@ -160,12 +160,19 @@ let eventSource = null;
 
 // 启动本地倒计时
 function startLocalCountdown(remaining, total) {
+  // 如果本地倒计时已经在运行，且时间差小于2秒，不需要重新同步
+  // 这样可以避免 SSE 每秒推送导致的"跳来跳去"
+  if (countdownInterval && Math.abs(countdownRemaining - remaining) < 2) {
+    return;
+  }
+  
   countdownRemaining = remaining;
   countdownTotal = total || remaining;
   
   // 清除之前的定时器
   if (countdownInterval) {
     clearInterval(countdownInterval);
+    countdownInterval = null;
   }
   
   // 立即更新显示
@@ -178,6 +185,7 @@ function startLocalCountdown(remaining, total) {
     
     if (countdownRemaining <= 0) {
       clearInterval(countdownInterval);
+      countdownInterval = null;
     }
   }, 1000);
 }
