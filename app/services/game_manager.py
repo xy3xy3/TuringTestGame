@@ -82,12 +82,14 @@ class GameManager:
         # 更新房间状态为 SETUP
         room.phase = "setup"
         room.current_round = 0
+        room.started_at = datetime.now(timezone.utc)
         await room.save()
-    
+
         # 通知所有玩家（使用 MongoDB ObjectId）
         await sse_manager.publish(room_id, "game_starting", {
             "countdown": room.config.setup_duration,
             "phase": "setup",
+            "started_at": room.started_at.isoformat(),
         })
 
         # 启动灵魂注入倒计时
@@ -101,11 +103,22 @@ class GameManager:
             return
 
         setup_time = room.config.setup_duration
+        started_at = room.started_at
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"启动灵魂注入倒计时，房间 {room_id}，时长 {setup_time} 秒")
 
         # 倒计时通知
         for remaining in range(setup_time, 0, -5):
-            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "setup"})
+            logger.info(f"发送 countdown 事件：{remaining} 秒")
+            await sse_manager.publish(room_id, "countdown", {
+                "remaining": remaining,
+                "phase": "setup",
+                "started_at": started_at.isoformat() if started_at else None,
+            })
             await asyncio.sleep(min(5, remaining))
+
+        logger.info(f"灵魂注入倒计时结束，房间 {room_id}")
 
         await asyncio.sleep(1)
 

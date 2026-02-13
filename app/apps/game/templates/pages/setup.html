@@ -12,7 +12,7 @@
         <p class="text-purple-200">设置你的 AI 角色，让它成为你的"灵魂"</p>
       </div>
       <div class="text-right">
-        <div id="countdown" class="text-3xl font-bold text-white">60</div>
+        <div id="countdown" class="text-3xl font-bold text-white">{{ room.config.setup_duration }}</div>
         <p class="text-purple-200 text-sm">秒后开始</p>
       </div>
     </div>
@@ -90,20 +90,73 @@
 const roomId = '{{ room.id }}';
 const setupTime = {{ room.config.setup_duration }};
 let systemPrompt = '';
+let startedAt = null;
+let timerInterval = null;
+
+// 计算剩余时间
+function getRemainingTime() {
+  if (!startedAt) return setupTime;
+  const now = Date.now();
+  const elapsed = (now - startedAt) / 1000; // 转换为秒
+  const remaining = Math.max(0, Math.floor(setupTime - elapsed));
+  return remaining;
+}
+
+// 更新倒计时显示
+function updateCountdown() {
+  const remaining = getRemainingTime();
+  document.getElementById('countdown').textContent = remaining;
+  document.getElementById('progress-bar').style.width = `${(remaining / setupTime) * 100}%`;
+  
+  if (remaining <= 0) {
+    clearInterval(timerInterval);
+  }
+}
+
+// 初始化倒计时显示
+updateCountdown();
+
+// 页面加载时获取房间状态，如果已经在 setup 阶段则获取 started_at
+fetch(`/game/api/${roomId}/state`)
+  .then(res => res.json())
+  .then(data => {
+    if (data.success && data.room) {
+      const room = data.room;
+      if (room.phase === 'setup' && room.started_at) {
+        startedAt = new Date(room.started_at).getTime();
+        updateCountdown();
+      }
+    }
+  })
+  .catch(e => console.error('Failed to fetch room state:', e));
+
+// 启动定时器，每秒更新
+timerInterval = setInterval(updateCountdown, 1000);
 
 // SSE 监听
 const eventSource = new EventSource(`/game/${roomId}/events`);
 
-// 监听后端倒计时事件
-eventSource.addEventListener('countdown', (e) => {
+// 监听游戏开始事件（获取服务器时间戳）
+eventSource.addEventListener('game_starting', (e) => {
   const data = JSON.parse(e.data);
-  const remaining = data.remaining;
-  document.getElementById('countdown').textContent = remaining;
-  document.getElementById('progress-bar').style.width = `${(remaining / setupTime) * 100}%`;
+  if (data.started_at) {
+    startedAt = new Date(data.started_at).getTime();
+    updateCountdown();
+  }
 });
 
-// 监听游戏开始事件（后端统一控制跳转）
+// 监听后端倒计时事件（同步时间）
+eventSource.addEventListener('countdown', (e) => {
+  const data = JSON.parse(e.data);
+  if (data.started_at) {
+    startedAt = new Date(data.started_at).getTime();
+    updateCountdown();
+  }
+});
+
+// 监听游戏进行事件（后端统一控制跳转）
 eventSource.addEventListener('game_playing', (e) => {
+  if (timerInterval) clearInterval(timerInterval);
   window.location.href = `/game/${roomId}/play`;
 });
 
