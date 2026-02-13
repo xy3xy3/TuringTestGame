@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -25,6 +26,13 @@ from .services.backup_scheduler import start_scheduler, stop_scheduler
 from .services.role_service import ensure_default_roles
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
