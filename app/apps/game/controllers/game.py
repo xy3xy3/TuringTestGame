@@ -122,6 +122,39 @@ async def result_page(request: Request, room_id: str) -> HTMLResponse:
     )
 
 
+@router.post("/reconnect")
+async def reconnect(request: Request) -> dict[str, Any]:
+    """重新连接（通过 player_id）。"""
+    player_info = _get_player_from_cookie(request)
+    if not player_info:
+        return {"success": False, "error": "未登录"}
+
+    player_id, _ = player_info
+
+    # 查找玩家
+    from app.models.game_player import GamePlayer
+    from beanie import PydanticObjectId
+
+    try:
+        player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id)})
+    except Exception:
+        return {"success": False, "error": "玩家不存在"}
+
+    if not player:
+        return {"success": False, "error": "玩家不存在"}
+
+    room = await game_room_service.get_room_by_id(player.room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    # 返回房间信息，让前端跳转到对应页面
+    return {
+        "success": True,
+        "room_id": player.room_id,
+        "phase": room.phase,
+    }
+
+
 @router.get("/{room_id}/play", response_class=HTMLResponse)
 async def play_page(request: Request, room_id: str) -> HTMLResponse:
     """游戏进行页面。"""
@@ -232,6 +265,26 @@ async def set_ready(request: Request, room_id: str) -> dict[str, Any]:
 async def start_game(room_id: str) -> dict[str, Any]:
     """开始游戏（房主操作）。"""
     return await game_manager.start_game(room_id)
+
+
+@router.post("/{room_id}/kick/{player_id}")
+async def kick_player(request: Request, room_id: str, player_id: str) -> dict[str, Any]:
+    """踢出玩家（房主操作）。"""
+    player_info = _get_player_from_cookie(request)
+    if not player_info:
+        return {"success": False, "error": "未登录"}
+
+    requester_id, _ = player_info
+
+    result = await game_room_service.kick_player(room_id, player_id, requester_id)
+
+    if result["success"]:
+        # 通知其他玩家
+        await game_manager.sse_manager.publish(room_id, "player_kicked", {
+            "player_id": player_id,
+        })
+
+    return result
 
 
 @router.post("/{room_id}/question")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import string
 from datetime import datetime, timezone, timedelta
@@ -11,6 +12,26 @@ from beanie import PydanticObjectId
 
 from app.models.game_room import GameRoom, GameConfig
 from app.models.game_player import GamePlayer
+
+
+def _hash_password(password: str, salt: str = "") -> str:
+    """对密码进行 SHA256 哈希（加盐）。"""
+    if not password:
+        return ""
+    if not salt:
+        salt = secrets.token_hex(16)
+    return f"{salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """验证密码。"""
+    if not password or not hashed:
+        return False
+    try:
+        salt, hash_value = hashed.split("$")
+        return hash_value == hashlib.sha256((salt + password).encode()).hexdigest()
+    except Exception:
+        return False
 
 
 def generate_room_code(length: int = 6) -> str:
@@ -72,7 +93,7 @@ async def create_room(
     # 创建房间
     room = GameRoom(
         room_code=room_code,
-        password=password,
+        password=_hash_password(password),
         config=game_config,
         phase="waiting",
         current_round=0,
@@ -122,7 +143,7 @@ async def join_room(
         return {"success": False, "error": "房间不存在"}
 
     # 检查密码
-    if room.password and room.password != password:
+    if room.password and not _verify_password(password, room.password):
         return {"success": False, "error": "房间密码错误"}
 
     # 检查房间是否已满
@@ -284,3 +305,38 @@ async def check_all_players_ready(room_id: str) -> dict[str, Any]:
         "ready_count": ready_count,
         "total_count": total_count,
     }
+
+
+async def kick_player(room_id: str, player_id: str, requester_id: str) -> dict[str, Any]:
+    """踢出玩家（房主操作）。
+
+    Args:
+        room_id: 房间 ID
+        player_id: 被踢出的玩家 ID
+        requester_id: 请求者 ID（房主）
+
+    Returns:
+        {"success": True} 或 {"success": False, "error": "..."}
+    """
+    # 验证请求者是房主
+    requester = await GamePlayer.find_one({"_id": PydanticObjectId(requester_id), "room_id": room_id})
+    if not requester or not requester.is_owner:
+        return {"success": False, "error": "只有房主可以踢人"}
+
+    # 不能踢自己
+    if player_id == requester_id:
+        return {"success": False, "error": "不能踢自己"}
+
+    # 查找被踢出的玩家
+    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room_id})
+    if not player:
+        return {"success": False, "error": "玩家不存在"}
+
+    # 不能踢房主
+    if player.is_owner:
+        return {"success": False, "error": "不能踢房主"}
+
+    # 删除玩家
+    await player.delete()
+
+    return {"success": True}

@@ -40,7 +40,7 @@ class GameRoom(Document):
     room_id: str = Field(default_factory=generate_room_id, max_length=16)
     password: str = Field(default="", max_length=64)
     owner_id: str = Field(..., max_length=32)
-    status: Literal["waiting", "setup", "playing", "finished"] = "waiting"
+    phase: Literal["waiting", "setup", "playing", "finished"] = "waiting"
     config: GameConfig = Field(default_factory=GameConfig)
     player_ids: list[str] = Field(default_factory=list)
     current_round: int = Field(default=0, ge=0)
@@ -53,5 +53,5 @@ class GameRoom(Document):
         name = "game_rooms"
         indexes = [
             IndexModel([("room_id", 1)], unique=True, name="uniq_room_id"),
-            IndexModel([("status", 1)], name="idx_room_status"),
+            IndexModel([("phase", 1)], name="idx_room_phase"),
         ]
