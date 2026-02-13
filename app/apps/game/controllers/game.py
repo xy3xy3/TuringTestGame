@@ -276,7 +276,8 @@ async def start_game(room_id: str) -> HTMLResponse:
     """开始游戏（房主操作）。"""
     result = await game_manager.start_game(room_id)
     if result["success"]:
-        return HTMLResponse(content='<div class="text-green-400">游戏即将开始...</div>')
+        # 成功启动游戏，返回跳转脚本（SSE 事件也会发送，作为双重保险）
+        return HTMLResponse(content='<script>window.location.href="/game/' + room_id + '/setup";</script>')
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
 
 
