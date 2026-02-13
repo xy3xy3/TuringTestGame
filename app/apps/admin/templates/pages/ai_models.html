@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section class="card p-5">
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">AI模型配置</h1>
+      <p class="text-sm text-slate-500">脚手架已生成，请按业务补充筛选与统计。</p>
+    </div>
+  </section>
+
+  <section>
+    {% include "partials/ai_models_table.html" %}
+  </section>
+</div>
+{% endblock %}

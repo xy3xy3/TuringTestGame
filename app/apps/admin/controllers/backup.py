@@ -212,7 +212,7 @@ async def backup_save_config(request: Request) -> HTMLResponse:
             for value in form.getlist("cloud_providers")
             if isinstance(value, str) and value.strip()
         ],
-        "cloud_path": str(form.get("cloud_path", "backups/pyfastadmin")).strip(),
+        "cloud_path": str(form.get("cloud_path", "backups/TuringTestGame")).strip(),
         "cloud_retention": form.get("cloud_retention", "10"),
         # OSS
         "oss_region": str(form.get("oss_region", "")).strip(),

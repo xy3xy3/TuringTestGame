@@ -28,7 +28,7 @@ def test_mongo_url() -> str:
 
 @pytest.fixture(scope="session")
 def test_mongo_db_name() -> str:
-    return os.getenv("TEST_MONGO_DB", "pyfastadmin_test")
+    return os.getenv("TEST_MONGO_DB", "TuringTestGame_test")
 
 
 @pytest.fixture(scope="session")

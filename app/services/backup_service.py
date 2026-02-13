@@ -44,7 +44,7 @@ DEFAULT_BACKUP_CONFIG: dict[str, Any] = {
     "excluded_collections": [],
     "cloud_enabled": False,
     "cloud_providers": [],
-    "cloud_path": "backups/pyfastadmin",
+    "cloud_path": "backups/TuringTestGame",
     "cloud_retention": 10,
     # 阿里云 OSS
     "oss_region": "",

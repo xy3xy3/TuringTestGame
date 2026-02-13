@@ -1,0 +1,15 @@
+{
+  "group_key": "game",
+  "node": {
+    "key": "ai_models",
+    "name": "AI模型配置",
+    "url": "/admin/ai_models",
+    "mode": "table",
+    "actions": [
+      "create",
+      "read",
+      "update",
+      "delete"
+    ]
+  }
+}

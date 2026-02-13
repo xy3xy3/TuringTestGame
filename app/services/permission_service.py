@@ -173,6 +173,7 @@ def build_permission_flags(permission_map: dict[str, set[str]]) -> dict[str, Any
         any(resource_flags.get("profile", {}).values())
         or any(resource_flags.get("password", {}).values())
     )
+    menu_flags["game"] = menu_flags.get("game", False)
     flags["menus"] = {
         **menu_flags,
     }

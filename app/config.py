@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(BASE_DIR / ".env")
 
-APP_NAME = os.getenv("APP_NAME", "PyFastAdmin")
+APP_NAME = os.getenv("APP_NAME", "TuringTestGame")
 APP_ENV = os.getenv("APP_ENV", "dev")
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
-MONGO_DB = os.getenv("MONGO_DB", "pyfastadmin")
+MONGO_DB = os.getenv("MONGO_DB", "TuringTestGame")
 
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")

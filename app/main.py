@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .apps.admin.controllers.admin_users import router as admin_users_router
+from .apps.admin.controllers.ai_models import router as ai_models_router
 from .apps.admin.controllers.auth import router as auth_router
 from .apps.admin.controllers.backup import router as backup_router
 from .apps.admin.controllers.config import router as config_router
@@ -31,6 +32,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(admin_users_router)
+app.include_router(ai_models_router)
 app.include_router(config_router)
 app.include_router(logs_router)
 app.include_router(backup_router)

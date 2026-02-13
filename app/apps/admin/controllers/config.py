@@ -57,7 +57,7 @@ def _build_backup_payload(form_data: Any) -> dict[str, Any]:
             for value in form_data.getlist("backup_cloud_providers")
             if isinstance(value, str) and value.strip()
         ],
-        "cloud_path": str(form_data.get("backup_cloud_path", "backups/pyfastadmin")).strip(),
+        "cloud_path": str(form_data.get("backup_cloud_path", "backups/TuringTestGame")).strip(),
         "cloud_retention": form_data.get("backup_cloud_retention", "10"),
         # OSS
         "oss_region": str(form_data.get("backup_oss_region", "")).strip(),

@@ -12,12 +12,12 @@ services:
     build:
       context: ../..
       dockerfile: deploy/product/Dockerfile
-    container_name: pyfastadmin-app
+    container_name: TuringTestGame-app
     restart: unless-stopped
     environment:
       APP_PORT: ${APP_PORT:-8000}
       MONGO_URL: mongodb://mongo:27017
-      MONGO_DB: ${MONGO_DB:-pyfastadmin}
+      MONGO_DB: ${MONGO_DB:-TuringTestGame}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS: ${ADMIN_PASS:-admin123}

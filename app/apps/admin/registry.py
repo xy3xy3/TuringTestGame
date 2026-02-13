@@ -36,6 +36,11 @@ BASE_ADMIN_TREE = [
         ],
     },
     {
+        "key": "game",
+        "name": "游戏管理",
+        "children": [],
+    },
+    {
         "key": "security",
         "name": "权限与安全",
         "children": [
