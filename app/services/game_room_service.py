@@ -269,7 +269,7 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
 
     # 如果是房主离开，解散房间
     if player.is_owner:
-        await GamePlayer.delete_many({"room_id": room.room_id})
+        await GamePlayer.find({"room_id": room.room_id}).delete()
         if room:
             await room.delete()
         return {"success": True, "room_deleted": True}
