@@ -135,9 +135,51 @@
 
     <!-- 玩家得分 -->
     <div class="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-4">
-      <p class="text-purple-200 text-sm mb-2">玩家得分：</p>
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-purple-200 text-sm">玩家得分：</p>
+        <button onclick="showScoreRules()" class="text-purple-300 hover:text-white text-sm underline">
+          <i class="fa-solid fa-circle-question mr-1"></i>得分规则
+        </button>
+      </div>
       <div class="flex flex-wrap gap-2" id="score-board">
         <!-- 玩家得分由 SSE 更新 -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 得分规则弹窗 -->
+<div id="score-rules-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-slate-800 rounded-2xl max-w-md w-full p-6 border border-white/10">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-xl font-bold text-white">得分规则</h3>
+      <button onclick="hideScoreRules()" class="text-gray-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+    <div class="space-y-4 text-gray-300 text-sm max-h-[60vh] overflow-y-auto">
+      <div>
+        <h4 class="text-white font-semibold mb-2 flex items-center">
+          <i class="fa-solid fa-gavel text-blue-400 mr-2"></i>陪审团（投票者）
+        </h4>
+        <ul class="space-y-1 ml-6 list-disc">
+          <li>猜对回答类型：<span class="text-green-400 font-bold">+50分</span></li>
+          <li>猜错回答类型：<span class="text-red-400 font-bold">-30分</span></li>
+          <li>选择跳过：<span class="text-gray-400">0分</span></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="text-white font-semibold mb-2 flex items-center">
+          <i class="fa-solid fa-user-secret text-pink-400 mr-2"></i>被测者（回答者）
+        </h4>
+        <ul class="space-y-1 ml-6 list-disc">
+          <li>使用AI回答并骗过1人：<span class="text-green-400 font-bold">+100分/人</span></li>
+          <li>完美伪装（所有人猜错）：<span class="text-green-400 font-bold">额外+200分</span></li>
+          <li>使用真人回答：无额外得分</li>
+        </ul>
+      </div>
+      <div class="bg-white/5 rounded-lg p-3 text-xs text-gray-400">
+        <p><i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>小贴士：作为被测者，使用AI回答并成功欺骗更多玩家可以获得更高分数！</p>
       </div>
     </div>
   </div>
@@ -381,9 +423,27 @@ async function submitQuestion() {
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: `question=${encodeURIComponent(question)}&round_id=${encodeURIComponent(currentRoundId)}`
   });
-  
+
   input.value = '';
 }
+
+// 显示得分规则弹窗
+function showScoreRules() {
+  document.getElementById('score-rules-modal').classList.remove('hidden');
+}
+
+// 隐藏得分规则弹窗
+function hideScoreRules() {
+  document.getElementById('score-rules-modal').classList.add('hidden');
+}
+
+// 点击弹窗背景关闭
+document.addEventListener('click', function(e) {
+  const modal = document.getElementById('score-rules-modal');
+  if (e.target === modal) {
+    hideScoreRules();
+  }
+});
 
 function showHumanAnswer() {
   document.getElementById('answer-choice-area').classList.add('hidden');
