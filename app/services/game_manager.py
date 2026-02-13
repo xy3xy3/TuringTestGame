@@ -145,22 +145,14 @@ class GameManager:
         await game_round.insert()
     
         # 通知所有玩家
-    
-                await sse_manager.publish(room_id, "new_round", {
-    
-                    "round_number": 1,
-    
-                    "interrogator_id": str(interrogator.id),
-    
-                    "interrogator_nickname": interrogator.nickname,
-    
-                    "subject_id": str(subject.id),
-    
-                    "subject_nickname": subject.nickname,
-    
-                    "question_time": room.config.question_duration,
-    
-                })
+        await sse_manager.publish(room_id, "new_round", {
+            "round_number": 1,
+            "interrogator_id": str(interrogator.id),
+            "interrogator_nickname": interrogator.nickname,
+            "subject_id": str(subject.id),
+            "subject_nickname": subject.nickname,
+            "question_time": room.config.question_duration,
+        })
     
         
     
