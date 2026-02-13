@@ -249,12 +249,12 @@ async def submit_setup(request: Request, room_id: str) -> dict[str, Any]:
     return result
 
 
-@router.post("/{room_id}/ready")
-async def set_ready(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/ready", response_class=HTMLResponse)
+async def set_ready(request: Request, room_id: str) -> HTMLResponse:
     """设置准备状态。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     player_id, _ = player_info
 
@@ -264,21 +264,22 @@ async def set_ready(request: Request, room_id: str) -> dict[str, Any]:
     result = await game_room_service.set_player_ready(room_id, player_id, is_ready)
 
     if result["success"]:
-        # 添加当前玩家的准备状态到响应中
-        result["player_id"] = player_id
-        result["player_is_ready"] = is_ready
-
         if result["all_ready"]:
             # 所有人准备好了，开始游戏
             await game_manager.start_game(room_id)
+            return HTMLResponse(content='<div class="text-green-400">游戏即将开始...</div>')
+        return HTMLResponse(content='')
 
-    return result
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "操作失败")}</div>')
 
 
-@router.post("/{room_id}/start")
-async def start_game(room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/start", response_class=HTMLResponse)
+async def start_game(room_id: str) -> HTMLResponse:
     """开始游戏（房主操作）。"""
-    return await game_manager.start_game(room_id)
+    result = await game_manager.start_game(room_id)
+    if result["success"]:
+        return HTMLResponse(content='<div class="text-green-400">游戏即将开始...</div>')
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
 
 
 @router.post("/{room_id}/kick/{player_id}")

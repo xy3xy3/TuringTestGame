@@ -54,7 +54,6 @@
         hx-post="/game/{{ room.id }}/ready"
         hx-vals='{"is_ready": "{{ "false" if current_player and current_player.is_ready else "true" }}"}'
         hx-target="#ready-result"
-        hx-on::after-swap="window.handleReadyResponse(this)"
       >
         {% if current_player and current_player.is_ready %}取消准备{% else %}准备{% endif %}
       </button>
@@ -91,24 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const roomId = '{{ room.id }}';
   console.log('Room ID:', roomId);
 
-  // 处理准备按钮响应（全局函数，供 HTMX 调用）
-  window.handleReadyResponse = function(btnElement) {
-    const resultDiv = document.getElementById('ready-result');
-    try {
-      const data = JSON.parse(resultDiv.textContent);
-      if (data.success) {
-        // 更新按钮文字和点击值
-        const isReady = data.player_is_ready;
-        btnElement.textContent = isReady ? '取消准备' : '准备';
-        btnElement.setAttribute('hx-vals', `{"is_ready": "${!isReady}"}`);
-        // 刷新玩家列表
-        htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
-      }
-    } catch (e) {
-      console.error('Failed to parse ready response:', e);
-    }
-  };
-
   // 获取当前玩家 ID（从 Cookie 中读取）
   function getCurrentPlayerId() {
     const cookies = document.cookie.split(';');
@@ -121,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
-  // 更新准备按钮状态（从服务器获取最新状态）
+  // 更新准备按钮状态
   window.updateReadyButtonState = function() {
     const readyBtn = document.getElementById('ready-btn');
     const currentPlayerId = getCurrentPlayerId();
