@@ -337,7 +337,7 @@ async def update_player_setup(
 
     player.system_prompt = system_prompt
     player.ai_model_id = ai_model_id
-    player.phase = "setup"
+    player.setup_completed = True
     await player.save()
 
     return {"success": True}
@@ -356,7 +356,7 @@ async def check_all_players_ready(room_id: str) -> dict[str, Any]:
 
     players = await get_players_in_room(room.room_id)
     total_count = len(players)
-    ready_count = sum(1 for p in players if p.phase == "setup")
+    ready_count = sum(1 for p in players if p.setup_completed)
 
     return {
         "all_ready": ready_count == total_count and total_count >= 2,

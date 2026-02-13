@@ -31,6 +31,7 @@ class GamePlayer(Document):
     is_ready: bool = Field(default=False)
     is_online: bool = Field(default=True)
     is_owner: bool = Field(default=False)
+    setup_completed: bool = Field(default=False)
     total_score: int = Field(default=0)
     deception_count: int = Field(default=0)
     correct_vote_count: int = Field(default=0)
