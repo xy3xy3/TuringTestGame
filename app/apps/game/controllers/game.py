@@ -360,17 +360,25 @@ async def submit_vote(request: Request, room_id: str) -> dict[str, Any]:
     return await game_manager.submit_vote(room_id, round_id, player_id, vote)
 
 
-@router.post("/{room_id}/leave")
-async def leave_room(request: Request, room_id: str) -> dict[str, Any]:
+@router.post("/{room_id}/leave", response_class=HTMLResponse)
+async def leave_room(request: Request, room_id: str) -> HTMLResponse:
     """离开房间。"""
     player_info = _get_player_from_cookie(request)
     if not player_info:
-        return {"success": False, "error": "未登录"}
+        return HTMLResponse(content='<script>window.location.href="/game";</script>')
 
     player_id, _ = player_info
 
     result = await game_room_service.leave_room(room_id, player_id)
-    return result
+
+    if result["success"]:
+        # 清除玩家 Cookie
+        response = HTMLResponse(content='<script>window.location.href="/game";</script>')
+        response.delete_cookie("player_id", path="/")
+        response.delete_cookie("player_token", path="/")
+        return response
+
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "离开失败")}</div>')
 
 
 @router.get("/{room_id}/events")
