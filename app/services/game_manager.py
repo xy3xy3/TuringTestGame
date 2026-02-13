@@ -61,6 +61,19 @@ class GameManager:
     def __init__(self):
         self._timers: dict[str, asyncio.Task] = {}
 
+    def _cancel_timer(self, room_id: str):
+        """取消房间正在运行的定时器。"""
+        if room_id in self._timers:
+            task = self._timers[room_id]
+            if not task.done():
+                task.cancel()
+            del self._timers[room_id]
+
+    def _start_timer(self, room_id: str, coro):
+        """启动新的定时器，先取消旧的。"""
+        self._cancel_timer(room_id)
+        self._timers[room_id] = asyncio.create_task(coro)
+
     async def start_game(self, room_id: str) -> dict[str, Any]:
         """开始游戏。
     
@@ -93,38 +106,42 @@ class GameManager:
         })
 
         # 启动灵魂注入倒计时
-        await self._start_setup_timer(room_id)
+        self._start_timer(room_id, self._start_setup_timer(room_id))
         return {"success": True}
 
     async def _start_setup_timer(self, room_id: str):
         """启动灵魂注入阶段倒计时。"""
-        room = await game_room_service.get_room_by_id(room_id)
-        if not room:
-            return
+        try:
+            room = await game_room_service.get_room_by_id(room_id)
+            if not room:
+                return
 
-        setup_time = room.config.setup_duration
-        started_at = room.started_at
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"启动灵魂注入倒计时，房间 {room_id}，时长 {setup_time} 秒")
+            setup_time = room.config.setup_duration
+            started_at = room.started_at
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"启动灵魂注入倒计时，房间 {room_id}，时长 {setup_time} 秒")
 
-        # 倒计时通知（每秒更新）
-        for remaining in range(setup_time, 0, -1):
-            logger.info(f"发送 countdown 事件：{remaining} 秒")
-            # 使用 ISO 格式 UTC 时间，确保前端能正确解析
-            await sse_manager.publish(room_id, "countdown", {
-                "remaining": remaining,
-                "phase": "setup",
-                "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if started_at else None,
-            })
+            # 倒计时通知（每秒更新）
+            for remaining in range(setup_time, 0, -1):
+                logger.info(f"发送 countdown 事件：{remaining} 秒")
+                # 使用 ISO 格式 UTC 时间，确保前端能正确解析
+                await sse_manager.publish(room_id, "countdown", {
+                    "remaining": remaining,
+                    "phase": "setup",
+                    "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if started_at else None,
+                })
+                await asyncio.sleep(1)
+
+            logger.info(f"灵魂注入倒计时结束，房间 {room_id}")
+
             await asyncio.sleep(1)
 
-        logger.info(f"灵魂注入倒计时结束，房间 {room_id}")
-
-        await asyncio.sleep(1)
-
-        # 时间到，进入游戏
-        await self._start_first_round(room_id)
+            # 时间到，进入游戏
+            await self._start_first_round(room_id)
+        except asyncio.CancelledError:
+            # 定时器被取消，正常退出
+            pass
 
     async def _start_first_round(self, room_id: str):
         """开始第一轮。"""
@@ -171,38 +188,42 @@ class GameManager:
         })
 
         # 启动提问倒计时
-        await self._start_question_timer(room_id, str(game_round.id))
+        self._start_timer(room_id, self._start_question_timer(room_id, str(game_round.id)))
 
     async def _start_question_timer(self, room_id: str, round_id: str):
         """启动提问阶段倒计时。"""
-        room = await game_room_service.get_room_by_id(room_id)
-        if not room:
-            return
+        try:
+            room = await game_room_service.get_room_by_id(room_id)
+            if not room:
+                return
 
-        question_time = room.config.question_duration
+            question_time = room.config.question_duration
 
-        # 倒计时通知（每秒更新）
-        for remaining in range(question_time, 0, -1):
-            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "questioning"})
-            await asyncio.sleep(1)
+            # 倒计时通知（每秒更新）
+            for remaining in range(question_time, 0, -1):
+                await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "questioning"})
+                await asyncio.sleep(1)
 
-        # 检查是否已提交问题
-        game_round = await GameRound.get(PydanticObjectId(round_id))
-        if game_round and not game_round.question:
-            # 时间到但没提交问题，随机生成一个默认问题
-            default_questions = [
-                "请介绍一下你自己",
-                "你今天做了什么?",
-                "你喜欢什么颜色?",
-                "你多大了?",
-                "你喜欢吃什么?",
-            ]
-            game_round.question = random.choice(default_questions)
-            game_round.question_at = datetime.now(timezone.utc)
-            await game_round.save()
+            # 检查是否已提交问题
+            game_round = await GameRound.get(PydanticObjectId(round_id))
+            if game_round and not game_round.question:
+                # 时间到但没提交问题，随机生成一个默认问题
+                default_questions = [
+                    "请介绍一下你自己",
+                    "你今天做了什么?",
+                    "你喜欢什么颜色?",
+                    "你多大了?",
+                    "你喜欢吃什么?",
+                ]
+                game_round.question = random.choice(default_questions)
+                game_round.question_at = datetime.now(timezone.utc)
+                await game_round.save()
 
-        # 进入回答阶段
-        await self._start_answer_phase(room_id, round_id)
+            # 进入回答阶段
+            await self._start_answer_phase(room_id, round_id)
+        except asyncio.CancelledError:
+            # 定时器被取消，正常退出
+            pass
 
     async def submit_question(self, room_id: str, round_id: str, player_id: str, question: str) -> dict[str, Any]:
         """提交问题。
@@ -263,31 +284,35 @@ class GameManager:
         })
 
         # 启动回答倒计时
-        await self._start_answer_timer(room_id, round_id)
+        self._start_timer(room_id, self._start_answer_timer(room_id, round_id))
 
     async def _start_answer_timer(self, room_id: str, round_id: str):
         """启动回答阶段倒计时。"""
-        room = await game_room_service.get_room_by_id(room_id)
-        if not room:
-            return
+        try:
+            room = await game_room_service.get_room_by_id(room_id)
+            if not room:
+                return
 
-        answer_time = room.config.answer_duration
+            answer_time = room.config.answer_duration
 
-        # 倒计时通知（每秒更新）
-        for remaining in range(answer_time, 0, -1):
-            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "answering"})
-            await asyncio.sleep(1)
-        # 检查是否已提交回答
-        game_round = await GameRound.get(PydanticObjectId(round_id))
-        if game_round and not game_round.answer:
-            # 时间到但没提交回答，使用默认回答
-            game_round.answer = "（未作答）"
-            game_round.answer_type = "human"
-            game_round.answer_submitted_at = datetime.now(timezone.utc)
-            await game_round.save()
+            # 倒计时通知（每秒更新）
+            for remaining in range(answer_time, 0, -1):
+                await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "answering"})
+                await asyncio.sleep(1)
+            # 检查是否已提交回答
+            game_round = await GameRound.get(PydanticObjectId(round_id))
+            if game_round and not game_round.answer:
+                # 时间到但没提交回答，使用默认回答
+                game_round.answer = "（未作答）"
+                game_round.answer_type = "human"
+                game_round.answer_submitted_at = datetime.now(timezone.utc)
+                await game_round.save()
 
-        # 进入投票阶段
-        await self._start_voting_phase(room_id, round_id)
+            # 进入投票阶段
+            await self._start_voting_phase(room_id, round_id)
+        except asyncio.CancelledError:
+            # 定时器被取消，正常退出
+            pass
 
     async def submit_answer(
             self,
@@ -420,22 +445,26 @@ class GameManager:
         })
 
         # 启动投票倒计时
-        await self._start_vote_timer(room_id, round_id)
+        self._start_timer(room_id, self._start_vote_timer(room_id, round_id))
 
     async def _start_vote_timer(self, room_id: str, round_id: str):
         """启动投票阶段倒计时。"""
-        room = await game_room_service.get_room_by_id(room_id)
-        if not room:
-            return
+        try:
+            room = await game_room_service.get_room_by_id(room_id)
+            if not room:
+                return
 
-        vote_time = room.config.vote_duration
+            vote_time = room.config.vote_duration
 
-        # 倒计时通知（每秒更新）
-        for remaining in range(vote_time, 0, -1):
-            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "voting"})
-            await asyncio.sleep(1)
-        # 结算本回合
-        await self._settle_round(room_id, round_id)
+            # 倒计时通知（每秒更新）
+            for remaining in range(vote_time, 0, -1):
+                await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "voting"})
+                await asyncio.sleep(1)
+            # 结算本回合
+            await self._settle_round(room_id, round_id)
+        except asyncio.CancelledError:
+            # 定时器被取消，正常退出
+            pass
 
     async def submit_vote(
         self,
@@ -631,7 +660,7 @@ class GameManager:
         })
 
         # 启动提问倒计时
-        await self._start_question_timer(room_id, str(game_round.id))
+        self._start_timer(room_id, self._start_question_timer(room_id, str(game_round.id)))
 
     async def _end_game(self, room_id: str):
         """结束游戏。"""
