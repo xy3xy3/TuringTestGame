@@ -35,15 +35,15 @@ async def game_index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("pages/index.html", {"request": request})
 
 
-@router.post("/create")
-async def create_room(request: Request) -> dict[str, Any]:
+@router.post("/create", response_class=HTMLResponse)
+async def create_room(request: Request) -> HTMLResponse:
     """创建房间。"""
     form_data = await request.form()
     nickname = str(form_data.get("nickname", "")).strip()
     password = str(form_data.get("password", "")).strip()
 
     if not nickname:
-        raise HTTPException(status_code=400, detail="请输入昵称")
+        return HTMLResponse(content='<div class="text-red-400">请输入昵称</div>')
 
     result = await game_room_service.create_room(
         nickname=nickname,
@@ -51,19 +51,17 @@ async def create_room(request: Request) -> dict[str, Any]:
     )
 
     if result["success"]:
-        return {
-            "success": True,
-            "room_id": str(result["room"].id),
-            "room_code": result["room"].room_id,
-            "player_id": str(result["player"].id),
-            "token": result["token"],
-        }
+        # 设置 Cookie 并返回跳转脚本
+        response = HTMLResponse(content=f'<script>window.location.href="/game/{result["room"].id}";</script>')
+        response.set_cookie("player_id", str(result["player"].id), max_age=86400, path="/")
+        response.set_cookie("player_token", result["token"], max_age=86400, path="/")
+        return response
 
-    return {"success": False, "error": result.get("error", "创建失败")}
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "创建失败")}</div>')
 
 
-@router.post("/join")
-async def join_room(request: Request) -> dict[str, Any]:
+@router.post("/join", response_class=HTMLResponse)
+async def join_room(request: Request) -> HTMLResponse:
     """加入房间。"""
     form_data = await request.form()
     room_code = str(form_data.get("room_code", "")).strip()
@@ -71,7 +69,7 @@ async def join_room(request: Request) -> dict[str, Any]:
     password = str(form_data.get("password", "")).strip()
 
     if not room_code or not nickname:
-        raise HTTPException(status_code=400, detail="请填写房间号和昵称")
+        return HTMLResponse(content='<div class="text-red-400">请填写房间号和昵称</div>')
 
     result = await game_room_service.join_room(
         room_code=room_code,
@@ -80,15 +78,13 @@ async def join_room(request: Request) -> dict[str, Any]:
     )
 
     if result["success"]:
-        return {
-            "success": True,
-            "room_id": str(result["room"].id),
-            "room_code": result["room"].room_id,
-            "player_id": str(result["player"].id),
-            "token": result["token"],
-        }
+        # 设置 Cookie 并返回跳转脚本
+        response = HTMLResponse(content=f'<script>window.location.href="/game/{result["room"].id}";</script>')
+        response.set_cookie("player_id", str(result["player"].id), max_age=86400, path="/")
+        response.set_cookie("player_token", result["token"], max_age=86400, path="/")
+        return response
 
-    return {"success": False, "error": result.get("error", "加入失败")}
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "加入失败")}</div>')
 
 
 @router.get("/{room_id}", response_class=HTMLResponse)

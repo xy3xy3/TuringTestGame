@@ -98,21 +98,5 @@
 
   validateNickname('create-form');
   validateNickname('join-form');
-
-  document.addEventListener('htmx:afterSwap', function (evt) {
-    const target = evt.detail.target;
-    if (target.id === 'create-result' || target.id === 'join-result') {
-      try {
-        const data = JSON.parse(target.textContent);
-        if (data.success) {
-          // 设置 Cookie
-          document.cookie = `player_id=${data.player_id}; path=/; max-age=86400`;
-          document.cookie = `player_token=${data.token}; path=/; max-age=86400`;
-          // 跳转
-          window.location.href = `/game/${data.room_id}`;
-        }
-      } catch (e) { }
-    }
-  });
 </script>
 {% endblock %}
