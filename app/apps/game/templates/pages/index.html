@@ -3,11 +3,13 @@
 {% block title %}图灵测试游戏{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+<div
+  class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
   <div class="max-w-md w-full">
     <!-- Logo 和标题 -->
     <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mb-4">
+      <div
+        class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mb-4">
         <i class="fa-solid fa-robot text-4xl text-white"></i>
       </div>
       <h1 class="text-4xl font-bold text-white mb-2">图灵测试</h1>
@@ -25,7 +27,7 @@
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-            <input type="password" name="password" class="input w-full" placeholder="留空则不设密码" />
+            <input type="text" name="password" class="input w-full" placeholder="留空则不设密码" />
           </div>
           <button type="submit" class="btn-primary w-full">创建房间</button>
         </div>
@@ -48,9 +50,10 @@
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-            <input type="password" name="password" class="input w-full" placeholder="如果房间有密码" />
+            <input type="text" name="password" class="input w-full" placeholder="如果房间有密码" />
           </div>
-          <button type="submit" class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
+          <button type="submit"
+            class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
         </div>
       </form>
       <div id="join-result" class="mt-4"></div>
@@ -70,20 +73,20 @@
 </div>
 
 <script>
-document.addEventListener('htmx:afterSwap', function(evt) {
-  const target = evt.detail.target;
-  if (target.id === 'create-result' || target.id === 'join-result') {
-    try {
-      const data = JSON.parse(target.textContent);
-      if (data.success) {
-        // 设置 Cookie
-        document.cookie = `player_id=${data.player_id}; path=/; max-age=86400`;
-        document.cookie = `player_token=${data.token}; path=/; max-age=86400`;
-        // 跳转
-        window.location.href = `/game/${data.room_id}`;
-      }
-    } catch (e) {}
-  }
-});
+  document.addEventListener('htmx:afterSwap', function (evt) {
+    const target = evt.detail.target;
+    if (target.id === 'create-result' || target.id === 'join-result') {
+      try {
+        const data = JSON.parse(target.textContent);
+        if (data.success) {
+          // 设置 Cookie
+          document.cookie = `player_id=${data.player_id}; path=/; max-age=86400`;
+          document.cookie = `player_token=${data.token}; path=/; max-age=86400`;
+          // 跳转
+          window.location.href = `/game/${data.room_id}`;
+        }
+      } catch (e) { }
+    }
+  });
 </script>
 {% endblock %}
