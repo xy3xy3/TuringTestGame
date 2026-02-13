@@ -57,14 +57,17 @@
       >
         {% if current_player and current_player.is_ready %}取消准备{% else %}准备{% endif %}
       </button>
+      {% if current_player and current_player.is_owner %}
       <button
         id="start-btn"
         class="flex-1 btn-primary"
         hx-post="/game/{{ room.id }}/start"
         hx-target="#start-result"
+        disabled
       >
         开始游戏
       </button>
+      {% endif %}
       <button
         class="px-6 btn-ghost text-red-400"
         hx-post="/game/{{ room.id }}/leave"
@@ -101,9 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
-  // 更新准备按钮状态
+  // 更新准备按钮状态和开始按钮可用性
   window.updateReadyButtonState = function() {
     const readyBtn = document.getElementById('ready-btn');
+    const startBtn = document.getElementById('start-btn');
     const currentPlayerId = getCurrentPlayerId();
 
     if (!currentPlayerId) return;
@@ -119,6 +123,27 @@ document.addEventListener('DOMContentLoaded', () => {
             // 更新按钮文字和点击值
             readyBtn.textContent = isReady ? '取消准备' : '准备';
             readyBtn.setAttribute('hx-vals', `{"is_ready": "${!isReady}"}`);
+          }
+
+          // 检查是否所有玩家都已准备（房主功能）
+          if (startBtn) {
+            const allReady = data.players.every(p => p.is_ready);
+            const playerCount = data.players.length;
+            const minPlayers = data.room?.config?.min_players || 2;
+
+            if (allReady && playerCount >= minPlayers) {
+              startBtn.disabled = false;
+              startBtn.textContent = '开始游戏';
+              startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+              startBtn.disabled = true;
+              if (playerCount < minPlayers) {
+                startBtn.textContent = `需要至少 ${minPlayers} 名玩家`;
+              } else {
+                startBtn.textContent = '等待所有玩家准备';
+              }
+              startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
           }
         }
       })

@@ -264,21 +264,45 @@ async def set_ready(request: Request, room_id: str) -> HTMLResponse:
     result = await game_room_service.set_player_ready(room_id, player_id, is_ready)
 
     if result["success"]:
-        if result["all_ready"]:
-            # 所有人准备好了，开始游戏
-            await game_manager.start_game(room_id)
-            return HTMLResponse(content='<div class="text-green-400">游戏即将开始...</div>')
+        # 只更新准备状态，不自动开始游戏
         return HTMLResponse(content='')
 
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "操作失败")}</div>')
 
 
 @router.post("/{room_id}/start", response_class=HTMLResponse)
-async def start_game(room_id: str) -> HTMLResponse:
+async def start_game(request: Request, room_id: str) -> HTMLResponse:
     """开始游戏（房主操作）。"""
+    # 获取当前玩家
+    player_info = _get_player_from_cookie(request)
+    if not player_info:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+
+    player_id, _ = player_info
+
+    # 验证房主身份
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
+
+    players = await game_room_service.get_players_in_room(room.room_id)
+    current_player = next((p for p in players if str(p.id) == player_id), None)
+    if not current_player or not current_player.is_owner:
+        return HTMLResponse(content='<div class="text-red-400">只有房主才能开始游戏</div>')
+
+    # 检查是否所有玩家都已准备
+    not_ready = [p for p in players if not p.is_ready]
+    if not_ready:
+        names = ', '.join(p.nickname for p in not_ready)
+        return HTMLResponse(content=f'<div class="text-red-400">以下玩家未准备：{names}</div>')
+
+    # 检查人数
+    if len(players) < room.config.min_players:
+        return HTMLResponse(content=f'<div class="text-red-400">需要至少 {room.config.min_players} 名玩家</div>')
+
     result = await game_manager.start_game(room_id)
     if result["success"]:
-        # 成功启动游戏，返回跳转脚本（SSE 事件也会发送，作为双重保险）
+        # 成功启动游戏，返回跳转脚本
         return HTMLResponse(content='<script>window.location.href="/game/' + room_id + '/setup";</script>')
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
 
