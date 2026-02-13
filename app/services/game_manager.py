@@ -104,7 +104,7 @@ class GameManager:
 
         # 倒计时通知
         for remaining in range(setup_time, 0, -5):
-            await sse_manager.publish(room_id, "countdown", {"remaining": remaining})
+            await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "setup"})
             await asyncio.sleep(min(5, remaining))
 
         await asyncio.sleep(1)
@@ -117,13 +117,18 @@ class GameManager:
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return
-    
+
+        # 通知所有玩家游戏开始，跳转到 play 页面
+        await sse_manager.publish(room_id, "game_playing", {
+            "room_id": room_id,
+        })
+
         players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < 2:
             await sse_manager.publish(room_id, "game_error", {"error": "玩家数不足"})
             await self._end_game(room_id)
             return
-    
+
         # 更新房间状态
         room.phase = "playing"
         room.current_round = 1

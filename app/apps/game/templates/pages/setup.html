@@ -89,32 +89,29 @@
 <script>
 const roomId = '{{ room.id }}';
 const setupTime = {{ room.config.setup_duration }};
-let timeLeft = setupTime;
 let systemPrompt = '';
-
-// 更新倒计时
-const countdownInterval = setInterval(() => {
-  timeLeft--;
-  document.getElementById('countdown').textContent = timeLeft;
-  document.getElementById('progress-bar').style.width = `${(timeLeft / setupTime) * 100}%`;
-
-  if (timeLeft <= 0) {
-    clearInterval(countdownInterval);
-  }
-}, 1000);
 
 // SSE 监听
 const eventSource = new EventSource(`/game/${roomId}/events`);
 
+// 监听后端倒计时事件
 eventSource.addEventListener('countdown', (e) => {
   const data = JSON.parse(e.data);
-  timeLeft = data.remaining;
-  document.getElementById('countdown').textContent = data.remaining;
-  document.getElementById('progress-bar').style.width = `${(data.remaining / setupTime) * 100}%`;
+  const remaining = data.remaining;
+  document.getElementById('countdown').textContent = remaining;
+  document.getElementById('progress-bar').style.width = `${(remaining / setupTime) * 100}%`;
 });
 
-eventSource.addEventListener('game_starting', (e) => {
+// 监听游戏开始事件（后端统一控制跳转）
+eventSource.addEventListener('game_playing', (e) => {
   window.location.href = `/game/${roomId}/play`;
+});
+
+// 监听游戏错误事件
+eventSource.addEventListener('game_error', (e) => {
+  const data = JSON.parse(e.data);
+  alert(data.error);
+  window.location.href = `/game/${roomId}`;
 });
 
 // 测试消息发送
