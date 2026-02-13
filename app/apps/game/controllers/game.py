@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from app.services import game_room_service, game_manager, ai_chat_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = BASE_DIR / "apps/admin/templates"
+TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/game")
@@ -32,7 +32,7 @@ def _get_player_from_cookie(request: Request) -> tuple[str, str] | None:
 @router.get("", response_class=HTMLResponse)
 async def game_index(request: Request) -> HTMLResponse:
     """游戏首页。"""
-    return templates.TemplateResponse("pages/game/index.html", {"request": request})
+    return templates.TemplateResponse("pages/index.html", {"request": request})
 
 
 @router.post("/create")
@@ -101,7 +101,7 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
     players = await game_room_service.get_players_in_room(room_id)
 
     return templates.TemplateResponse(
-        "pages/game/room.html",
+        "pages/room.html",
         {
             "request": request,
             "room": room,
@@ -114,7 +114,7 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
 async def result_page(request: Request, room_id: str) -> HTMLResponse:
     """游戏结算页面。"""
     return templates.TemplateResponse(
-        "pages/game/result.html",
+        "pages/result.html",
         {
             "request": request,
             "room_id": room_id,
@@ -171,7 +171,7 @@ async def play_page(request: Request, room_id: str) -> HTMLResponse:
     players = await game_room_service.get_players_in_room(room_id)
 
     return templates.TemplateResponse(
-        "pages/game/play.html",
+        "pages/play.html",
         {
             "request": request,
             "room": room,
@@ -204,7 +204,7 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
     ai_models = await ai_chat_service.get_enabled_models()
 
     return templates.TemplateResponse(
-        "pages/game/setup.html",
+        "pages/setup.html",
         {
             "request": request,
             "room": room,

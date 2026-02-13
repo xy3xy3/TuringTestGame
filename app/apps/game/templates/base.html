@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ request.state.csrf_token or '' }}" />
+  <title>{% block title %}图灵测试游戏{% endblock %}</title>
+  <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <style>
+    .input {
+      @apply w-full rounded-lg border border-slate-600 bg-slate-800/50 px-4 py-2 text-white placeholder-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20;
+    }
+    .btn-primary {
+      @apply rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 font-medium text-white transition-all hover:from-purple-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50;
+    }
+    .btn-secondary {
+      @apply rounded-lg bg-slate-700 px-4 py-2 font-medium text-white transition-all hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50;
+    }
+  </style>
+</head>
+
+<body class="antialiased">
+  {% block content %}{% endblock %}
+
+  <div id="toast" data-variant="success" class="toast">
+    <div class="toast-body">
+      <div class="toast-dot"></div>
+      <div>
+        <p data-toast-title class="toast-title">操作完成</p>
+        <p data-toast-message class="toast-message">已成功提交变更</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="global-indicator"
+    class="htmx-indicator fixed bottom-6 right-6 z-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 shadow-ink">
+    正在处理...
+  </div>
+
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/alpine.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+
+</html>
