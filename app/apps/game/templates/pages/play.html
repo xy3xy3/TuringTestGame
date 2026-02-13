@@ -391,6 +391,11 @@ function showHumanAnswer() {
 }
 
 async function submitAIAnswer() {
+  // 立即隐藏选择区域，防止重复点击
+  document.getElementById('answer-choice-area').classList.add('hidden');
+  document.getElementById('wait-area').classList.remove('hidden');
+  document.getElementById('wait-area').querySelector('p').textContent = '已选择AI回答，等待生成...';
+
   await fetch(`/game/${roomId}/answer`, {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -447,6 +452,13 @@ async function initGameState() {
       } else {
         console.warn('Player not found in room');
       }
+      // 更新玩家得分显示
+      const playerScores = roomData.players.map(p => ({
+        id: p.id,
+        nickname: p.nickname,
+        score: p.score || 0
+      }));
+      updateScoreBoard(playerScores);
     }
 
     // 获取当前回合
