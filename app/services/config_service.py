@@ -136,3 +136,54 @@ async def save_base_url(url: str) -> str:
             updated_at=utc_now(),
         ).insert()
     return value
+
+
+# 游戏时间配置（各阶段时长）
+GAME_TIME_CONFIG_KEYS = {
+    "setup_duration": ("灵魂注入时长", 60, 30, 300),
+    "question_duration": ("提问阶段时长", 30, 15, 60),
+    "answer_duration": ("回答阶段时长", 45, 20, 90),
+    "vote_duration": ("投票阶段时长", 15, 10, 30),
+    "reveal_delay": ("结果揭晓延迟", 3, 1, 10),
+}
+
+GAME_TIME_CONFIG_GROUP = "game_time"
+
+
+async def get_game_time_config() -> dict[str, int]:
+    """获取游戏各阶段时间配置（秒）。"""
+    config = {}
+    for key, (name, default, _, _) in GAME_TIME_CONFIG_KEYS.items():
+        item = await find_config_item(GAME_TIME_CONFIG_GROUP, key)
+        if item and item.value.isdigit():
+            config[key] = int(item.value)
+        else:
+            config[key] = default
+    return config
+
+
+async def save_game_time_config(config: dict[str, int]) -> dict[str, int]:
+    """保存游戏各阶段时间配置。"""
+    for key, (name, default, min_val, max_val) in GAME_TIME_CONFIG_KEYS.items():
+        value = config.get(key, default)
+        # 确保值在有效范围内
+        value = max(min_val, min(max_val, int(value)))
+
+        item = await find_config_item(GAME_TIME_CONFIG_GROUP, key)
+        if item:
+            item.value = str(value)
+            item.name = name
+            item.description = f"游戏配置：{name}（秒）"
+            item.updated_at = utc_now()
+            await item.save()
+        else:
+            await ConfigItem(
+                key=key,
+                name=name,
+                value=str(value),
+                group=GAME_TIME_CONFIG_GROUP,
+                description=f"游戏配置：{name}（秒），范围 {min_val}-{max_val}",
+                updated_at=utc_now(),
+            ).insert()
+
+    return await get_game_time_config()

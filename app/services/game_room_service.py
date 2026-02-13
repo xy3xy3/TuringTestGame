@@ -12,6 +12,7 @@ from beanie import PydanticObjectId
 
 from app.models.game_room import GameRoom, GameConfig
 from app.models.game_player import GamePlayer
+from app.services import config_service
 
 
 def _hash_password(password: str, salt: str = "") -> str:
@@ -51,10 +52,6 @@ async def create_room(
     min_players: int = 2,
     max_players: int = 8,
     total_rounds: int = 4,
-    setup_time: int = 60,
-    question_time: int = 30,
-    answer_time: int = 45,
-    vote_time: int = 15,
 ) -> dict[str, Any]:
     """创建游戏房间。
 
@@ -65,10 +62,6 @@ async def create_room(
         min_players: 最少玩家数
         max_players: 最多玩家数
         total_rounds: 总回合数
-        setup_time: 灵魂注入阶段时长（秒）
-        question_time: 提问阶段时长（秒）
-        answer_time: 回答阶段时长（秒）
-        vote_time: 投票阶段时长（秒）
 
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
@@ -77,8 +70,11 @@ async def create_room(
     if len(nickname) < 2:
         return {"success": False, "error": "昵称至少需要2个字符"}
 
+    # 获取系统配置的游戏时间
+    game_time_config = await config_service.get_game_time_config()
+
     room_code = generate_room_code()
-    
+
     # 确保房间码唯一
     while await GameRoom.find_one({"room_id": room_code}):
         room_code = generate_room_code()
@@ -88,10 +84,11 @@ async def create_room(
         min_players=min_players,
         max_players=max_players,
         rounds_per_game=total_rounds,
-        setup_duration=setup_time,
-        question_duration=question_time,
-        answer_duration=answer_time,
-        vote_duration=vote_time,
+        setup_duration=game_time_config.get("setup_duration", 60),
+        question_duration=game_time_config.get("question_duration", 30),
+        answer_duration=game_time_config.get("answer_duration", 45),
+        vote_duration=game_time_config.get("vote_duration", 15),
+        reveal_delay=game_time_config.get("reveal_delay", 3),
     )
 
     # 创建房间（先创建，获取 room id 后再创建玩家）

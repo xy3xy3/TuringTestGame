@@ -23,7 +23,7 @@ CLOUD_PROVIDER_LABELS: dict[str, str] = {
     "aliyun_oss": "阿里云 OSS",
     "tencent_cos": "腾讯云 COS",
 }
-VALID_CONFIG_TABS = {"system", "backup"}
+VALID_CONFIG_TABS = {"system", "backup", "cleanup", "game_time"}
 
 
 def base_context(request: Request) -> dict[str, Any]:
@@ -82,6 +82,7 @@ async def config_page(request: Request) -> HTMLResponse:
     backup_config = await backup_service.get_backup_config()
     base_url = await config_service.get_base_url()
     cleanup_config = await cleanup_service.get_cleanup_config()
+    game_time_config = await config_service.get_game_time_config()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
 
     context = {
@@ -96,6 +97,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "active_config_tab": active_config_tab,
         "base_url": base_url,
         "cleanup_config": cleanup_config,
+        "game_time_config": game_time_config,
     }
     await log_service.record_request(
         request,
@@ -154,6 +156,16 @@ async def config_save(
     )
     restart_cleanup_scheduler()
 
+    # 保存游戏时间配置
+    game_time_payload = {
+        "setup_duration": int(form_data.get("setup_duration", "60") or "60"),
+        "question_duration": int(form_data.get("question_duration", "30") or "30"),
+        "answer_duration": int(form_data.get("answer_duration", "45") or "45"),
+        "vote_duration": int(form_data.get("vote_duration", "15") or "15"),
+        "reveal_delay": int(form_data.get("reveal_delay", "3") or "3"),
+    }
+    await config_service.save_game_time_config(game_time_payload)
+
     restart_scheduler()
 
     smtp = await config_service.get_smtp_config()
@@ -161,6 +173,7 @@ async def config_save(
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
     cleanup_config = await config_service.get_cleanup_config()
+    game_time_config = await config_service.get_game_time_config()
     context = {
         **base_context(request),
         "smtp": smtp,
@@ -173,6 +186,7 @@ async def config_save(
         "active_config_tab": active_config_tab,
         "base_url": base_url,
         "cleanup_config": cleanup_config,
+        "game_time_config": game_time_config,
     }
     detail = (
         f"更新系统配置（tab={active_config_tab}，含备份参数），日志类型："

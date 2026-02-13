@@ -11,7 +11,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-lg font-semibold text-slate-900">系统配置</h1>
-          <p class="text-sm text-slate-500">按页签切换：系统设置 / 备份设置 / 数据清理</p>
+          <p class="text-sm text-slate-500">按页签切换：系统设置 / 备份设置 / 数据清理 / 游戏时间</p>
         </div>
 
         <div class="inline-flex rounded-md border border-slate-200 bg-white p-1">
@@ -38,6 +38,14 @@
             x-on:click="configTab = 'cleanup'"
           >
             数据清理
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="configTab === 'game_time' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="configTab = 'game_time'"
+          >
+            游戏时间
           </button>
         </div>
       </div>
@@ -450,6 +458,94 @@
           <li>清理时会同时删除关联的玩家、回合和投票记录</li>
           <li>进行中的游戏数据不会被清理</li>
           <li>清理操作不可恢复，请确保已开启备份功能</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card p-5" x-show="configTab === 'game_time'" x-cloak>
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-slate-900">游戏阶段时长</h2>
+          <p class="text-sm text-slate-500">配置游戏各阶段的时间限制（单位：秒）</p>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-12">
+        <div class="md:col-span-6 lg:col-span-4">
+          <label class="label">灵魂注入时长</label>
+          <input
+            name="setup_duration"
+            type="number"
+            min="30"
+            max="300"
+            class="input"
+            value="{{ game_time_config.setup_duration }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">游戏开始前准备时间（30-300秒）</p>
+        </div>
+        <div class="md:col-span-6 lg:col-span-4">
+          <label class="label">提问阶段时长</label>
+          <input
+            name="question_duration"
+            type="number"
+            min="15"
+            max="60"
+            class="input"
+            value="{{ game_time_config.question_duration }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">提问者输入问题的时间（15-60秒）</p>
+        </div>
+        <div class="md:col-span-6 lg:col-span-4">
+          <label class="label">回答阶段时长</label>
+          <input
+            name="answer_duration"
+            type="number"
+            min="20"
+            max="90"
+            class="input"
+            value="{{ game_time_config.answer_duration }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">被测者回答问题的时间（20-90秒）</p>
+        </div>
+        <div class="md:col-span-6 lg:col-span-4">
+          <label class="label">投票阶段时长</label>
+          <input
+            name="vote_duration"
+            type="number"
+            min="10"
+            max="30"
+            class="input"
+            value="{{ game_time_config.vote_duration }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">其他玩家投票的时间（10-30秒）</p>
+        </div>
+        <div class="md:col-span-6 lg:col-span-4">
+          <label class="label">结果揭晓延迟</label>
+          <input
+            name="reveal_delay"
+            type="number"
+            min="1"
+            max="10"
+            class="input"
+            value="{{ game_time_config.reveal_delay }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">回合结果揭晓前的等待时间（1-10秒）</p>
+        </div>
+      </div>
+
+      <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 class="text-sm font-semibold text-blue-800 mb-2">
+          <i class="fa-solid fa-info-circle mr-1"></i>配置说明
+        </h3>
+        <ul class="text-sm text-blue-700 space-y-1 ml-5 list-disc">
+          <li>修改配置后，新创建的房间将使用新的时间设置</li>
+          <li>进行中的游戏不受影响，继续沿用创建时的配置</li>
+          <li>建议根据玩家群体调整时长，新手可适当延长时间</li>
         </ul>
       </div>
     </section>
