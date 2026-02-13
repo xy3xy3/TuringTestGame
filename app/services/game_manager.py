@@ -447,7 +447,7 @@ class GameManager:
         """提交投票。
 
         Args:
-            room_id: 房间 ID
+            room_id: 房间 ID（ObjectId 字符串）
             round_id: 回合 ID
             player_id: 投票玩家 ID
             vote: "human", "ai" 或 "skip"
@@ -455,6 +455,11 @@ class GameManager:
         Returns:
             {"success": True} 或 {"success": False, "error": "..."}
         """
+        # 获取房间以取得正确的 room_id（6位码）
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room:
+            return {"success": False, "error": "房间不存在"}
+
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if not game_round:
             return {"success": False, "error": "回合不存在"}
@@ -463,25 +468,25 @@ class GameManager:
         if player_id == game_round.subject_id:
             return {"success": False, "error": "被测者不能投票"}
 
-        # 检查是否已投票
+        # 检查是否已投票（使用6位房间码）
         existing = await VoteRecord.find_one({
-            "room_id": room_id,
+            "room_id": room.room_id,
             "round_number": game_round.round_number,
             "voter_id": player_id,
         })
         if existing:
             return {"success": False, "error": "已投票"}
 
-        # 记录投票
+        # 记录投票（使用6位房间码）
         vote_record = VoteRecord(
-            room_id=room_id,
+            room_id=room.room_id,
             round_number=game_round.round_number,
             voter_id=player_id,
             vote=vote,
         )
         await vote_record.insert()
 
-        # 通知
+        # 通知（使用 ObjectId 作为 room_id 发布事件）
         await sse_manager.publish(room_id, "vote_submitted", {
             "voter_id": player_id,
         })
