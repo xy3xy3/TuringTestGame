@@ -327,7 +327,11 @@ class GameManager:
         # 计算提交时间
         submit_time = 0
         if game_round.question_at:
-            submit_time = (datetime.now(timezone.utc) - game_round.question_at).total_seconds()
+            question_at = game_round.question_at
+            # 如果 question_at 没有时区信息，假设为 UTC
+            if question_at.tzinfo is None:
+                question_at = question_at.replace(tzinfo=timezone.utc)
+            submit_time = (datetime.now(timezone.utc) - question_at).total_seconds()
     
         # 获取延迟
         display_delay = await ai_chat_service.calculate_display_delay(answer_type, submit_time)
