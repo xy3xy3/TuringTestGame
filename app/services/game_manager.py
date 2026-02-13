@@ -534,7 +534,7 @@ class GameManager:
             "answer": game_round.answer,
             "votes": vote_stats,
             "scores": scores,
-            "player_scores": {str(p.id): p.score for p in players},
+            "player_scores": {str(p.id): p.total_score for p in players},
         })
 
         # 等待几秒后开始下一轮
