@@ -503,9 +503,9 @@ class GameManager:
         if not room:
             return
     
-        # 获取所有投票
+        # 获取所有投票（使用6位房间码查询，因为 VoteRecord 存储的是 room.room_id）
         votes = await VoteRecord.find({
-            "room_id": room_id,
+            "room_id": room.room_id,
             "round_number": game_round.round_number,
         }).to_list()
     
