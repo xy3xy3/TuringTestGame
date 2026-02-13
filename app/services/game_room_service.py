@@ -73,6 +73,10 @@ async def create_room(
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
     """
+    # 验证昵称长度
+    if len(nickname) < 2:
+        return {"success": False, "error": "昵称至少需要2个字符"}
+
     room_code = generate_room_code()
     
     # 确保房间码唯一
@@ -143,6 +147,10 @@ async def join_room(
         或
         {"success": False, "error": "错误信息"}
     """
+    # 验证昵称长度
+    if len(nickname) < 2:
+        return {"success": False, "error": "昵称至少需要2个字符"}
+
     # 查找房间
     room = await GameRoom.find_one({"room_id": room_code.upper()})
     if not room:

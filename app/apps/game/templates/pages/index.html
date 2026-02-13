@@ -23,7 +23,7 @@
         <div class="space-y-4">
           <div>
             <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" required />
+            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
@@ -46,7 +46,7 @@
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" required />
+            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
           </div>
           <div>
             <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
@@ -73,6 +73,32 @@
 </div>
 
 <script>
+  // 表单验证
+  function validateNickname(formId) {
+    const form = document.getElementById(formId);
+    const nicknameInput = form.querySelector('input[name="nickname"]');
+    const resultDiv = document.getElementById(formId.replace('-form', '-result'));
+
+    nicknameInput.addEventListener('input', function() {
+      if (this.value.length > 0 && this.value.length < 2) {
+        this.setCustomValidity('昵称至少需要2个字符');
+      } else {
+        this.setCustomValidity('');
+      }
+    });
+
+    form.addEventListener('htmx:beforeRequest', function(evt) {
+      const nickname = nicknameInput.value.trim();
+      if (nickname.length < 2) {
+        evt.preventDefault();
+        resultDiv.innerHTML = '<div class="text-red-400 text-sm">昵称至少需要2个字符</div>';
+      }
+    });
+  }
+
+  validateNickname('create-form');
+  validateNickname('join-form');
+
   document.addEventListener('htmx:afterSwap', function (evt) {
     const target = evt.detail.target;
     if (target.id === 'create-result' || target.id === 'join-result') {
