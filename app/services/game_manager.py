@@ -391,10 +391,9 @@ class GameManager:
         if not room:
             return
 
-        # 通知显示回答
+        # 通知显示回答（不发送 answer_type，双方都无法看到是否是 AI 回答）
         await sse_manager.publish(room_id, "new_answer", {
             "answer": game_round.answer,
-            "answer_type": game_round.answer_type,
             "subject_id": game_round.subject_id,
         })
 

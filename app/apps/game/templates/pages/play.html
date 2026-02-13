@@ -220,14 +220,8 @@ function connectSSE() {
     document.getElementById('loading-area').classList.add('hidden');
     document.getElementById('answer-content').classList.remove('hidden');
     document.getElementById('answer-text').textContent = data.answer;
-    // 只有非被观察者才显示回答类型标签（被观察者不应该知道自己是否用了AI）
-    const answerTypeLabel = document.getElementById('answer-type-label');
-    if (!isCurrentSubject) {
-      answerTypeLabel.textContent = data.answer_type === 'ai' ? '（AI 代答）' : '（真人回答）';
-      answerTypeLabel.classList.remove('hidden');
-    } else {
-      answerTypeLabel.classList.add('hidden');
-    }
+    // 隐藏回答类型标签（双方都无法看到是否是 AI 回答）
+    document.getElementById('answer-type-label').classList.add('hidden');
     updatePhaseDisplay('voting');
   });
 
@@ -420,14 +414,8 @@ async function initGameState() {
         document.getElementById('loading-area').classList.add('hidden');
         document.getElementById('answer-content').classList.remove('hidden');
         document.getElementById('answer-text').textContent = round.answer;
-        // 只有非被观察者才显示回答类型标签（被观察者不应该知道自己是否用了AI）
-        const answerTypeLabel = document.getElementById('answer-type-label');
-        if (!isCurrentSubject) {
-          answerTypeLabel.textContent = round.answer_type === 'ai' ? '（AI 代答）' : '（真人回答）';
-          answerTypeLabel.classList.remove('hidden');
-        } else {
-          answerTypeLabel.classList.add('hidden');
-        }
+        // 隐藏回答类型标签（双方都无法看到是否是 AI 回答）
+        document.getElementById('answer-type-label').classList.add('hidden');
       }
 
       // 根据状态更新阶段显示
