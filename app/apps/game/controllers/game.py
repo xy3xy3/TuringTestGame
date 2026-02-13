@@ -54,7 +54,7 @@ async def create_room(request: Request) -> dict[str, Any]:
         return {
             "success": True,
             "room_id": str(result["room"].id),
-            "room_code": result["room"].room_code,
+            "room_code": result["room"].room_id,
             "player_id": str(result["player"].id),
             "token": result["token"],
         }
@@ -83,7 +83,7 @@ async def join_room(request: Request) -> dict[str, Any]:
         return {
             "success": True,
             "room_id": str(result["room"].id),
-            "room_code": result["room"].room_code,
+            "room_code": result["room"].room_id,
             "player_id": str(result["player"].id),
             "token": result["token"],
         }
@@ -410,7 +410,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
         "success": True,
         "room": {
             "id": str(room.id),
-            "room_code": room.room_code,
+            "room_code": room.room_id,
             "phase": room.phase,
             "current_round": room.current_round,
             "config": room.config.model_dump(),

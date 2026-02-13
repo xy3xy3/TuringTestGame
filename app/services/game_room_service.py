@@ -76,7 +76,7 @@ async def create_room(
     room_code = generate_room_code()
     
     # 确保房间码唯一
-    while await GameRoom.find_one({"room_code": room_code}):
+    while await GameRoom.find_one({"room_id": room_code}):
         room_code = generate_room_code()
 
     # 创建游戏配置
@@ -90,10 +90,11 @@ async def create_room(
         vote_time=vote_time,
     )
 
-    # 创建房间
+    # 创建房间（先创建，获取 room id 后再创建玩家）
     room = GameRoom(
-        room_code=room_code,
-        password=_hash_password(password),
+        room_id=room_code,
+        owner_id=nickname,  # 暂时使用昵称作为 owner_id，后续可更新为玩家 ID
+        password=password,  # 直接存储密码，不哈希
         config=game_config,
         phase="waiting",
         current_round=0,
@@ -103,7 +104,7 @@ async def create_room(
     # 创建房主玩家
     player_token = generate_player_token()
     player = GamePlayer(
-        room_id=str(room.id),
+        room_id=room.room_id,  # 使用 6 位房间码，而非 MongoDB ObjectId
         nickname=nickname,
         token=player_token,
         is_owner=True,
@@ -111,6 +112,11 @@ async def create_room(
         phase="waiting",
     )
     await player.insert()
+
+    # 更新房间的 owner_id 为玩家 ID，并将玩家加入房间列表
+    room.owner_id = str(player.id)
+    room.player_ids.append(str(player.id))
+    await room.save()
 
     return {
         "success": True,
@@ -138,12 +144,12 @@ async def join_room(
         {"success": False, "error": "错误信息"}
     """
     # 查找房间
-    room = await GameRoom.find_one({"room_code": room_code.upper()})
+    room = await GameRoom.find_one({"room_id": room_code.upper()})
     if not room:
         return {"success": False, "error": "房间不存在"}
 
-    # 检查密码
-    if room.password and not _verify_password(password, room.password):
+    # 检查密码（直接比较，因为现在密码是明文存储的）
+    if room.password and room.password != password:
         return {"success": False, "error": "房间密码错误"}
 
     # 检查房间是否已满
@@ -182,7 +188,7 @@ async def join_room(
 
 async def get_room_by_code(room_code: str) -> GameRoom | None:
     """根据房间码获取房间。"""
-    return await GameRoom.find_one({"room_code": room_code.upper()})
+    return await GameRoom.find_one({"room_id": room_code.upper()})
 
 
 async def get_room_by_id(room_id: str) -> GameRoom | None:
