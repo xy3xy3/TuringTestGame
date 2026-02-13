@@ -108,8 +108,8 @@ class GameManager:
         logger = logging.getLogger(__name__)
         logger.info(f"启动灵魂注入倒计时，房间 {room_id}，时长 {setup_time} 秒")
 
-        # 倒计时通知（每 5 秒同步一次时间）
-        for remaining in range(setup_time, 0, -5):
+        # 倒计时通知（每秒更新）
+        for remaining in range(setup_time, 0, -1):
             logger.info(f"发送 countdown 事件：{remaining} 秒")
             # 使用 ISO 格式 UTC 时间，确保前端能正确解析
             await sse_manager.publish(room_id, "countdown", {
@@ -117,7 +117,7 @@ class GameManager:
                 "phase": "setup",
                 "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if started_at else None,
             })
-            await asyncio.sleep(min(5, remaining))
+            await asyncio.sleep(1)
 
         logger.info(f"灵魂注入倒计时结束，房间 {room_id}")
 
@@ -181,10 +181,10 @@ class GameManager:
 
         question_time = room.config.question_duration
 
-        # 倒计时通知
-        for remaining in range(question_time, 0, -5):
+        # 倒计时通知（每秒更新）
+        for remaining in range(question_time, 0, -1):
             await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "questioning"})
-            await asyncio.sleep(min(5, remaining))
+            await asyncio.sleep(1)
 
         # 检查是否已提交问题
         game_round = await GameRound.get(PydanticObjectId(round_id))
@@ -273,10 +273,10 @@ class GameManager:
 
         answer_time = room.config.answer_duration
 
-        # 倒计时通知
-        for remaining in range(answer_time, 0, -5):
+        # 倒计时通知（每秒更新）
+        for remaining in range(answer_time, 0, -1):
             await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "answering"})
-            await asyncio.sleep(min(5, remaining))
+            await asyncio.sleep(1)
         # 检查是否已提交回答
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if game_round and not game_round.answer:
@@ -430,10 +430,10 @@ class GameManager:
 
         vote_time = room.config.vote_duration
 
-        # 倒计时通知
-        for remaining in range(vote_time, 0, -5):
+        # 倒计时通知（每秒更新）
+        for remaining in range(vote_time, 0, -1):
             await sse_manager.publish(room_id, "countdown", {"remaining": remaining, "phase": "voting"})
-            await asyncio.sleep(min(5, remaining))
+            await asyncio.sleep(1)
         # 结算本回合
         await self._settle_round(room_id, round_id)
 
