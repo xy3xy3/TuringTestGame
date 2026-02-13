@@ -473,12 +473,17 @@ async function submitHumanAnswer() {
   const answer = input.value.trim();
   if (!answer) return;
 
+  // 立即隐藏输入区域，防止重复点击
+  document.getElementById('answer-input-area').classList.add('hidden');
+  document.getElementById('wait-area').classList.remove('hidden');
+  document.getElementById('wait-area').querySelector('p').textContent = '已提交回答，等待投票...';
+
   await fetch(`/game/${roomId}/answer`, {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: `answer_type=human&answer_content=${encodeURIComponent(answer)}&round_id=${encodeURIComponent(currentRoundId)}`
   });
-  
+
   input.value = '';
 }
 

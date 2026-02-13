@@ -387,8 +387,8 @@ async def kick_player(room_id: str, player_id: str, requester_id: str) -> dict[s
     if player_id == requester_id:
         return {"success": False, "error": "不能踢自己"}
 
-    # 查找被踢出的玩家
-    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room_id})
+    # 查找被踢出的玩家（使用6位房间码）
+    player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id), "room_id": room.room_id})
     if not player:
         return {"success": False, "error": "玩家不存在"}
 

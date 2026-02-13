@@ -435,6 +435,10 @@ class GameManager:
         if not game_round:
             return
 
+        # 避免重复进入投票阶段
+        if game_round.status == "voting":
+            return
+
         game_round.status = "voting"
         await game_round.save()
 
@@ -516,7 +520,7 @@ class GameManager:
         await vote_record.insert()
 
         # 通知（使用 ObjectId 作为 room_id 发布事件）
-        await sse_manager.publish(room_id, "vote_submitted", {
+        await sse_manager.publish(str(room.id), "vote_submitted", {
             "voter_id": player_id,
         })
 
@@ -545,7 +549,7 @@ class GameManager:
         players = await game_room_service.get_players_in_room(room.room_id)
         for player in players:
             player_score = scores.get(str(player.id), 0)
-            player.total_score = player.total_score + player_score
+            player.total_score = (player.total_score or 0) + player_score
             await player.save()
         # 更新回合状态
         game_round.status = "revealed"
