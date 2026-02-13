@@ -34,6 +34,37 @@ def _is_htmx_request(request: Request) -> bool:
     return request.headers.get("hx-request", "").strip().lower() == "true"
 
 
+def parse_ai_model_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
+    """标准化 AI 模型表单数据，确保复选框字段始终可被保存。"""
+
+    payload = dict(raw_payload)
+    payload["name"] = str(payload.get("name", "")).strip()
+    payload["base_url"] = str(payload.get("base_url", "")).strip()
+    payload["api_key"] = str(payload.get("api_key", "")).strip()
+    payload["model_name"] = str(payload.get("model_name", "")).strip()
+    payload["temperature"] = str(payload.get("temperature", "0.8")).strip() or "0.8"
+    payload["max_tokens"] = str(payload.get("max_tokens", "500")).strip() or "500"
+    payload["description"] = str(payload.get("description", "")).strip()
+    payload["is_enabled"] = "true" if str(payload.get("is_enabled", "")).strip().lower() == "true" else "false"
+    payload["is_default"] = "true" if str(payload.get("is_default", "")).strip().lower() == "true" else "false"
+    return payload
+
+
+def validate_ai_model_payload(payload: dict[str, Any]) -> list[str]:
+    """校验 AI 模型表单必填字段。"""
+
+    errors: list[str] = []
+    if not payload["name"]:
+        errors.append("名称不能为空")
+    if not payload["base_url"]:
+        errors.append("Base URL 不能为空")
+    if not payload["api_key"]:
+        errors.append("API Key 不能为空")
+    if not payload["model_name"]:
+        errors.append("模型名称不能为空")
+    return errors
+
+
 @router.get("/ai_models", response_class=HTMLResponse)
 async def ai_models_page(request: Request) -> HTMLResponse:
     """模块列表页。"""
@@ -73,17 +104,8 @@ async def ai_models_create(request: Request) -> HTMLResponse:
     """创建 AI 模型配置。"""
 
     form_data = await request.form()
-    payload = dict(form_data)
-
-    errors: list[str] = []
-    if not str(payload.get("name", "")).strip():
-        errors.append("名称不能为空")
-    if not str(payload.get("base_url", "")).strip():
-        errors.append("Base URL 不能为空")
-    if not str(payload.get("api_key", "")).strip():
-        errors.append("API Key 不能为空")
-    if not str(payload.get("model_name", "")).strip():
-        errors.append("模型名称不能为空")
+    payload = parse_ai_model_payload(dict(form_data))
+    errors = validate_ai_model_payload(payload)
 
     if errors:
         context = {
@@ -111,7 +133,10 @@ async def ai_models_create(request: Request) -> HTMLResponse:
     response.headers["HX-Retarget"] = "#ai_models-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
-        {"toast": {"title": "已创建", "message": "AI模型创建成功", "variant": "success"}, "close-modal": True},
+        {
+            "admin-toast": {"title": "已创建", "message": "AI模型创建成功", "variant": "success"},
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -190,7 +215,7 @@ async def ai_models_bulk_delete(request: Request) -> HTMLResponse:
         message = f"已批量删除 {deleted_count} 条记录"
 
     response.headers["HX-Trigger"] = json.dumps(
-        {"toast": {"title": "批量删除完成", "message": message, "variant": "warning"}},
+        {"admin-toast": {"title": "批量删除完成", "message": message, "variant": "warning"}},
         ensure_ascii=True,
     )
     return response
@@ -206,17 +231,8 @@ async def ai_models_update(request: Request, item_id: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="记录不存在")
 
     form_data = await request.form()
-    payload = dict(form_data)
-
-    errors: list[str] = []
-    if not str(payload.get("name", "")).strip():
-        errors.append("名称不能为空")
-    if not str(payload.get("base_url", "")).strip():
-        errors.append("Base URL 不能为空")
-    if not str(payload.get("api_key", "")).strip():
-        errors.append("API Key 不能为空")
-    if not str(payload.get("model_name", "")).strip():
-        errors.append("模型名称不能为空")
+    payload = parse_ai_model_payload(dict(form_data))
+    errors = validate_ai_model_payload(payload)
 
     if errors:
         context = {
@@ -244,7 +260,10 @@ async def ai_models_update(request: Request, item_id: str) -> HTMLResponse:
     response.headers["HX-Retarget"] = "#ai_models-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
-        {"toast": {"title": "已更新", "message": "AI模型更新成功", "variant": "success"}, "close-modal": True},
+        {
+            "admin-toast": {"title": "已更新", "message": "AI模型更新成功", "variant": "success"},
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -298,7 +317,7 @@ async def ai_models_delete(request: Request, item_id: str) -> HTMLResponse:
     response.headers["HX-Retarget"] = "#ai_models-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
-        {"toast": {"title": "已删除", "message": "记录已删除", "variant": "warning"}},
+        {"admin-toast": {"title": "已删除", "message": "记录已删除", "variant": "warning"}},
         ensure_ascii=True,
     )
     return response
