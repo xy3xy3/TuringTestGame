@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section
+    class="card p-5"
+    x-data='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+  >
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">查询条件</h1>
+      <p class="text-sm text-slate-500">按关键词、操作类型和模块过滤日志</p>
+    </div>
+
+    <form
+      id="logs-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/logs/table"
+      hx-target="#logs-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+
+      <div class="md:col-span-5">
+        <label class="label">关键词</label>
+        <input
+          name="search_q"
+          x-model="search_q"
+          class="input"
+          placeholder="对象 / 明细 / 操作者 / 路径"
+        />
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="label">操作</label>
+        <select name="search_action" x-model="search_action" class="input">
+          <option value="">全部</option>
+          {% for key in log_action_order %}
+            <option value="{{ key }}">{{ action_labels[key] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="label">模块</label>
+        <select name="search_module" x-model="search_module" class="input">
+          <option value="">全部</option>
+          {% for key, label in module_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-3">
+        <label class="label">排序</label>
+        <select name="search_sort" x-model="search_sort" class="input">
+          {% for key, label in log_sort_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-12 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; search_action=''; search_module=''; search_sort='created_desc'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/logs_table.html" %}
+  </section>
+</div>
+{% endblock %}

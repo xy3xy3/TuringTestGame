@@ -1,0 +1,46 @@
+{% macro render_node(node, checked_map, action_labels) %}
+  {% if node.children %}
+    <div class="rounded-2xl border border-black/10 bg-white/80 p-4" data-perm-group>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-3 text-sm font-semibold text-ink">
+          <input type="checkbox" class="h-4 w-4" data-perm-group-toggle aria-label="选中本组" />
+          <span class="h-2 w-2 rounded-full bg-ink" aria-hidden="true"></span>
+          <span>{{ node.name }}</span>
+        </label>
+      </div>
+      <div class="mt-4 space-y-4 border-l border-black/10 pl-6">
+        {% for child in node.children %}
+          {{ render_node(child, checked_map, action_labels) }}
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-perm-row>
+      <label class="flex cursor-pointer items-start gap-3 text-left">
+        <input type="checkbox" class="mt-1 h-4 w-4" data-perm-row-toggle aria-label="选中本行" />
+        <span>
+          <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
+          <p class="text-xs text-muted">{{ node.url }}</p>
+          {% if node.mode %}
+            <p class="text-[11px] text-muted/80">资源类型：{{ {"table": "表格数据", "settings": "系统设置", "operation": "任务操作", "self_service": "个人自助"}.get(node.mode, node.mode) }}</p>
+          {% endif %}
+        </span>
+      </label>
+      <div class="flex flex-wrap gap-2">
+        {% for action in node.actions %}
+          <label class="flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-ink">
+            <input
+              type="checkbox"
+              name="perm_{{ node.key }}"
+              value="{{ action }}"
+              data-perm-action-value="{{ action }}"
+              {% if action == "read" %}data-perm-read="true"{% endif %}
+              {% if action in checked_map.get(node.key, []) %}checked{% endif %}
+            />
+            {{ action_labels.get(action, action) }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+{% endmacro %}

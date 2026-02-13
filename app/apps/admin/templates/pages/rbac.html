@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section
+    class="card p-5"
+    x-data='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+  >
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">查询条件</h1>
+      <p class="text-sm text-slate-500">支持关键词、状态和排序组合筛选</p>
+    </div>
+
+    <form
+      id="role-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/rbac/roles/table"
+      hx-target="#role-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+
+      <div class="md:col-span-6">
+        <label class="label">关键词</label>
+        <input
+          name="search_q"
+          x-model="search_q"
+          class="input"
+          placeholder="请输入角色标识/名称/描述"
+        />
+      </div>
+
+      <div class="md:col-span-3">
+        <label class="label">状态</label>
+        <select name="search_status" x-model="search_status" class="input">
+          <option value="">全部</option>
+          {% for key, meta in status_meta.items() %}
+            <option value="{{ key }}">{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-3">
+        <label class="label">排序</label>
+        <select name="search_sort" x-model="search_sort" class="input">
+          {% for key, label in role_sort_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-12 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; search_status=''; search_sort='updated_desc'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/role_table.html" %}
+  </section>
+</div>
+{% endblock %}

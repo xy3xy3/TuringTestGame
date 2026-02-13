@@ -1,0 +1,30 @@
+services:
+  mongo:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
+    container_name: pyfastadmin-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/product/Dockerfile
+    container_name: pyfastadmin-app
+    restart: unless-stopped
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-pyfastadmin}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS:-admin123}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

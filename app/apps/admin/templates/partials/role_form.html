@@ -1,0 +1,103 @@
+{% from "partials/rbac_tree_form.html" import render_node %}
+
+<div class="flex flex-col" style="max-height: calc(100vh - 9rem);">
+  <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+    <div>
+      <h2 class="font-display text-2xl text-ink">
+        {% if mode == "edit" %}编辑角色{% else %}新建角色{% endif %}
+      </h2>
+      <p class="text-sm text-muted">请填写角色信息，保存后列表将自动刷新。</p>
+    </div>
+    <button class="btn-ghost px-3" x-on:click="modalOpen = false">关闭</button>
+  </div>
+
+  <form
+    class="mt-4 flex flex-col"
+    style="min-height: 0; flex: 1;"
+    hx-post="{{ action }}"
+    hx-target="#modal-body"
+    hx-swap="innerHTML"
+    hx-indicator="#modal-indicator"
+  >
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+    <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
+    <input type="hidden" name="search_status" value="{{ filters.search_status }}" />
+    <input type="hidden" name="search_sort" value="{{ filters.search_sort }}" />
+    <input type="hidden" name="page" value="{{ page }}" />
+
+    <div class="space-y-4 overflow-y-auto pr-1" style="min-height: 0; flex: 1;">
+      {% if errors %}
+        <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
+          <p class="font-semibold">请修正以下问题：</p>
+          <ul class="mt-2 list-disc pl-5">
+            {% for err in errors %}
+              <li>{{ err }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="label">角色名称</label>
+          <input name="name" class="input" required value="{{ form.name }}" />
+        </div>
+        <div>
+          <label class="label">角色标识</label>
+          <input
+            name="slug"
+            class="input"
+            required
+            pattern="^[a-z][a-z0-9_]{1,31}$"
+            title="仅支持小写字母、数字、下划线，且必须以字母开头"
+            value="{{ form.slug }}"
+            {% if mode == "edit" %}readonly{% endif %}
+          />
+        </div>
+        <div>
+          <label class="label">状态</label>
+          <select name="status" class="input">
+            {% for key, meta in status_meta.items() %}
+              <option value="{{ key }}" {% if key == form.status %}selected{% endif %}>
+                {{ meta.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="label">描述</label>
+          <input name="description" class="input" value="{{ form.description }}" />
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-black/10 bg-white/70 p-4" data-perm-scope>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-ink">权限树</p>
+            <p class="text-xs text-muted">当前角色：{{ form.slug or "未填写" }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn-ghost px-3" data-perm-action="all">全选</button>
+            <button type="button" class="btn-ghost px-3" data-perm-action="none">全不选</button>
+            <button type="button" class="btn-ghost px-3" data-perm-action="invert">反选</button>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-5">
+          {% for group in tree %}
+            {{ render_node(group, checked_map, action_labels) }}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 border-t border-slate-100 pt-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
+        <button type="submit" class="btn-primary">
+          {% if mode == "edit" %}保存修改{% else %}保存新建{% endif %}
+        </button>
+      </div>
+    </div>
+  </form>
+</div>

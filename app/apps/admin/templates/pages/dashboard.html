@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section class="card p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-slate-900">首页仪表盘</h1>
+        <p class="mt-1 text-sm text-slate-500">查看角色权限和管理员账号的整体状态。</p>
+      </div>
+      <div class="chip">Dashboard</div>
+    </div>
+  </section>
+
+  <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div class="card p-5">
+      <p class="text-sm text-slate-500">角色总数</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ dashboard.role_total }}</p>
+      <p class="mt-3 text-xs text-slate-500">启用 {{ dashboard.role_enabled }} / 禁用 {{ dashboard.role_disabled }}</p>
+    </div>
+
+    <div class="card p-5">
+      <p class="text-sm text-slate-500">管理员总数</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ dashboard.admin_total }}</p>
+      <p class="mt-3 text-xs text-slate-500">启用 {{ dashboard.admin_enabled }} / 禁用 {{ dashboard.admin_disabled }}</p>
+    </div>
+
+    <div class="card p-5">
+      <p class="text-sm text-slate-500">角色最近更新</p>
+      <p class="mt-2 text-xl font-semibold text-slate-900">{{ dashboard.latest_role }}</p>
+      <a class="btn-link mt-4 inline-flex" href="/admin/rbac">进入 RBAC 管理</a>
+    </div>
+
+    <div class="card p-5">
+      <p class="text-sm text-slate-500">管理员最近更新</p>
+      <p class="mt-2 text-xl font-semibold text-slate-900">{{ dashboard.latest_admin }}</p>
+      <a class="btn-link mt-4 inline-flex" href="/admin/users">进入管理员管理</a>
+    </div>
+  </section>
+
+  <section class="card p-5">
+    <h2 class="text-base font-semibold text-slate-900">快捷入口</h2>
+    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <a class="rounded-md border border-slate-200 px-4 py-3 text-sm text-slate-600 transition hover:border-blue-300 hover:text-blue-600" href="/admin/rbac">
+        角色与权限配置
+      </a>
+      <a class="rounded-md border border-slate-200 px-4 py-3 text-sm text-slate-600 transition hover:border-blue-300 hover:text-blue-600" href="/admin/users">
+        管理员账号维护
+      </a>
+      <a class="rounded-md border border-slate-200 px-4 py-3 text-sm text-slate-600 transition hover:border-blue-300 hover:text-blue-600" href="/admin/config">
+        系统配置
+      </a>
+      <a class="rounded-md border border-slate-200 px-4 py-3 text-sm text-slate-600 transition hover:border-blue-300 hover:text-blue-600" href="/admin/logs">
+        操作日志
+      </a>
+    </div>
+  </section>
+</div>
+{% endblock %}

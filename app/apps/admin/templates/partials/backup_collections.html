@@ -1,0 +1,22 @@
+<div class="mt-2 grid gap-2 md:grid-cols-4">
+  {% set backup_config_perm = request.state.permission_flags.backup_config %}
+  {% if collections %}
+    {% for coll in collections %}
+      <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          name="excluded_collections"
+          value="{{ coll }}"
+          class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          {% if coll in excluded_collections %}checked{% endif %}
+          {% if not backup_config_perm['update'] %}disabled{% endif %}
+        />
+        <span>{{ coll }}</span>
+      </label>
+    {% endfor %}
+  {% else %}
+    <div class="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-sm text-slate-500 md:col-span-4">
+      当前没有可备份集合。
+    </div>
+  {% endif %}
+</div>

@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4" x-data='{ "configTab": {{ active_config_tab | tojson }} }'>
+  {% set config_perm = request.state.permission_flags.config %}
+  <form class="space-y-4" method="post" action="/admin/config">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+    <input type="hidden" name="config_tab" x-model="configTab" />
+
+    <section class="card p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-lg font-semibold text-slate-900">系统配置</h1>
+          <p class="text-sm text-slate-500">按页签切换：系统设置 / 备份设置</p>
+        </div>
+
+        <div class="inline-flex rounded-md border border-slate-200 bg-white p-1">
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="configTab === 'system' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="configTab = 'system'"
+          >
+            系统设置
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="configTab === 'backup' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="configTab = 'backup'"
+          >
+            备份设置
+          </button>
+        </div>
+      </div>
+
+      {% if saved %}
+        <div class="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-600">
+          配置已保存。
+        </div>
+      {% endif %}
+
+      {% if not config_perm['update'] %}
+        <div class="mt-4 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          当前角色仅有查看权限，不能修改系统配置。
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="card p-5" x-show="configTab === 'system'" x-cloak>
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-base font-semibold text-slate-900">站点设置</h2>
+        <p class="text-sm text-slate-500">配置 SMTP 参数与站点日志策略</p>
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-12">
+        <div class="md:col-span-8">
+          <label class="label">SMTP 主机</label>
+          <input name="smtp_host" class="input" value="{{ smtp.smtp_host }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">SMTP 端口</label>
+          <input name="smtp_port" class="input" value="{{ smtp.smtp_port }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+        <div class="md:col-span-12">
+          <label class="label">SMTP 用户名</label>
+          <input name="smtp_user" class="input" value="{{ smtp.smtp_user }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+        <div class="md:col-span-12">
+          <label class="label">SMTP 密码</label>
+          <input name="smtp_pass" type="password" class="input" value="{{ smtp.smtp_pass }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+        <div class="md:col-span-8">
+          <label class="label">发件人地址</label>
+          <input name="smtp_from" class="input" value="{{ smtp.smtp_from }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">启用 SSL (true/false)</label>
+          <input name="smtp_ssl" class="input" value="{{ smtp.smtp_ssl }}" {% if not config_perm['update'] %}readonly{% endif %} />
+        </div>
+      </div>
+
+      <div class="mt-6 border-t border-slate-100 pt-4">
+        <h3 class="text-base font-semibold text-slate-900">操作日志记录类型</h3>
+        <p class="mt-1 text-sm text-slate-500">选择写入“操作日志”页面的增删改查类型。</p>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-4">
+          {% for key, label in audit_action_labels.items() %}
+            <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="audit_actions"
+                value="{{ key }}"
+                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                {% if key in audit_actions %}checked{% endif %}
+                {% if not config_perm['update'] %}disabled{% endif %}
+              />
+              <span>{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section
+      id="backup-settings"
+      class="card p-5"
+      x-show="configTab === 'backup'"
+      x-cloak
+      x-data='{
+        "cloudEnabled": {{ backup_config.cloud_enabled | tojson }},
+        "providers": (function(v) { return Array.isArray(v) ? v : [] })({{ backup_config.cloud_providers | tojson }}),
+        "hasProvider": function(provider) { return this.providers.indexOf(provider) !== -1 },
+        "toggleExcludedCollections": function(mode) {
+          var boxes = this.$refs.excludedWrap.querySelectorAll("input[name=\"backup_excluded_collections\"]");
+          boxes.forEach(function(box) {
+            if (box.disabled) { return }
+            if (mode === "all") { box.checked = true }
+            else if (mode === "none") { box.checked = false }
+            else { box.checked = !box.checked }
+          });
+        }
+      }'
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-base font-semibold text-slate-900">备份配置（OSS / COS）</h2>
+        {% if request.state.permission_flags.backup_records['read'] %}
+          <a href="/admin/backup" class="text-sm text-blue-600 hover:text-blue-700">前往备份管理</a>
+        {% endif %}
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-12">
+        <div class="md:col-span-4">
+          <label class="label">自动备份</label>
+          <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              name="backup_enabled"
+              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              {% if backup_config.enabled %}checked{% endif %}
+              {% if not config_perm['update'] %}disabled{% endif %}
+            />
+            <span>启用定时备份</span>
+          </label>
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">备份间隔（小时）</label>
+          <input
+            name="backup_interval_hours"
+            type="number"
+            min="1"
+            class="input"
+            value="{{ backup_config.interval_hours }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+        </div>
+        <div class="md:col-span-4">
+          <label class="label">本地保留份数</label>
+          <input
+            name="backup_local_retention"
+            type="number"
+            min="1"
+            class="input"
+            value="{{ backup_config.local_retention }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+        </div>
+
+        <div class="md:col-span-12">
+          <label class="label">本地备份目录</label>
+          <input
+            name="backup_local_dir"
+            class="input"
+            value="{{ backup_config.local_dir }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <label class="label">忽略集合（不参与备份）</label>
+          {% if config_perm['update'] %}
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="btn-ghost px-3 py-1 text-xs" x-on:click="toggleExcludedCollections('all')">全选</button>
+              <button type="button" class="btn-ghost px-3 py-1 text-xs" x-on:click="toggleExcludedCollections('invert')">反选</button>
+              <button type="button" class="btn-ghost px-3 py-1 text-xs" x-on:click="toggleExcludedCollections('none')">清空</button>
+            </div>
+          {% endif %}
+        </div>
+
+        <div x-ref="excludedWrap" class="mt-2 max-h-52 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+          {% if collections %}
+            <div class="grid gap-2 md:grid-cols-3">
+              {% for name in collections %}
+                <label class="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="backup_excluded_collections"
+                    value="{{ name }}"
+                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    {% if name in backup_config.excluded_collections %}checked{% endif %}
+                    {% if not config_perm['update'] %}disabled{% endif %}
+                  />
+                  <span class="truncate">{{ name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-sm text-slate-500">暂无可选集合。</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="mt-6 border-t border-slate-100 pt-4">
+        <div class="grid gap-4 md:grid-cols-12">
+          <div class="md:col-span-4">
+            <label class="label">云端备份</label>
+            <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="backup_cloud_enabled"
+                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                x-model="cloudEnabled"
+                {% if backup_config.cloud_enabled %}checked{% endif %}
+                {% if not config_perm['update'] %}disabled{% endif %}
+              />
+              <span>启用云端备份</span>
+            </label>
+          </div>
+          <div class="md:col-span-4">
+            <label class="label">云端保留份数</label>
+            <input
+              name="backup_cloud_retention"
+              type="number"
+              min="1"
+              class="input"
+              value="{{ backup_config.cloud_retention }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+          </div>
+          <div class="md:col-span-4">
+            <label class="label">云端路径前缀</label>
+            <input
+              name="backup_cloud_path"
+              class="input"
+              value="{{ backup_config.cloud_path }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+          </div>
+        </div>
+
+        <div class="mt-4" x-show="cloudEnabled" x-cloak>
+          <label class="label">备份目标云端</label>
+          <p class="mt-1 text-xs text-slate-500">勾选后将显示对应的云端凭证配置，并在保存后自动回显。</p>
+          <div class="mt-2 grid gap-3 md:grid-cols-4">
+            {% for key, label in cloud_provider_labels.items() %}
+              <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="backup_cloud_providers"
+                  value="{{ key }}"
+                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  x-model="providers"
+                  {% if key in backup_config.cloud_providers %}checked{% endif %}
+                  {% if not config_perm['update'] %}disabled{% endif %}
+                />
+                <span>{{ label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-md border border-slate-200 p-4" x-show="cloudEnabled && hasProvider('aliyun_oss')" x-cloak>
+          <h3 class="text-sm font-semibold text-slate-700">
+            <i class="fa-solid fa-cloud text-orange-500"></i>
+            阿里云 OSS 配置
+          </h3>
+          <div class="mt-3 grid gap-4 md:grid-cols-12">
+            <div class="md:col-span-4">
+              <label class="label">Region</label>
+              <input
+                name="backup_oss_region"
+                class="input"
+                value="{{ backup_config.oss_region }}"
+                placeholder="cn-guangzhou"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-4">
+              <label class="label">Endpoint（可选）</label>
+              <input
+                name="backup_oss_endpoint"
+                class="input"
+                value="{{ backup_config.oss_endpoint }}"
+                placeholder="oss-cn-guangzhou.aliyuncs.com"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-4">
+              <label class="label">Bucket</label>
+              <input
+                name="backup_oss_bucket"
+                class="input"
+                value="{{ backup_config.oss_bucket }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-6">
+              <label class="label">AccessKey ID</label>
+              <input
+                name="backup_oss_access_key_id"
+                class="input"
+                value="{{ backup_config.oss_access_key_id }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-6">
+              <label class="label">AccessKey Secret</label>
+              <input
+                name="backup_oss_access_key_secret"
+                type="password"
+                class="input"
+                value="{{ backup_config.oss_access_key_secret }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-md border border-slate-200 p-4" x-show="cloudEnabled && hasProvider('tencent_cos')" x-cloak>
+          <h3 class="text-sm font-semibold text-slate-700">
+            <i class="fa-solid fa-cloud text-blue-500"></i>
+            腾讯云 COS 配置
+          </h3>
+          <div class="mt-3 grid gap-4 md:grid-cols-12">
+            <div class="md:col-span-6">
+              <label class="label">Region</label>
+              <input
+                name="backup_cos_region"
+                class="input"
+                value="{{ backup_config.cos_region }}"
+                placeholder="ap-guangzhou"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-6">
+              <label class="label">Bucket</label>
+              <input
+                name="backup_cos_bucket"
+                class="input"
+                value="{{ backup_config.cos_bucket }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-6">
+              <label class="label">SecretId</label>
+              <input
+                name="backup_cos_secret_id"
+                class="input"
+                value="{{ backup_config.cos_secret_id }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+            <div class="md:col-span-6">
+              <label class="label">SecretKey</label>
+              <input
+                name="backup_cos_secret_key"
+                type="password"
+                class="input"
+                value="{{ backup_config.cos_secret_key }}"
+                {% if not config_perm['update'] %}readonly{% endif %}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {% if config_perm['update'] %}
+      <section class="card p-5">
+        <div class="flex justify-end">
+          <button type="submit" class="btn-primary">保存设置</button>
+        </div>
+      </section>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

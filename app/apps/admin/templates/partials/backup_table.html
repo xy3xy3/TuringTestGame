@@ -1,0 +1,163 @@
+<div id="backup-table" class="space-y-4">
+  {% set backup_records_perm = request.state.permission_flags.backup_records %}
+  {% set show_action_col = backup_records_perm['restore'] or backup_records_perm['delete'] %}
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <p class="text-sm text-slate-500">共 {{ pagination.total }} 条记录</p>
+
+    <button
+      class="btn-ghost"
+      hx-get="/admin/backup/table"
+      hx-target="#backup-table-container"
+      hx-swap="innerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"page": pagination.page, "page_size": pagination.page_size}|tojson }}'
+    >
+      刷新
+    </button>
+  </div>
+
+  {% if action_feedback %}
+    <div class="rounded-md border px-3 py-2 text-sm {% if action_feedback.variant == 'success' %}border-emerald-100 bg-emerald-50 text-emerald-700{% else %}border-red-100 bg-red-50 text-red-600{% endif %}">
+      {{ action_feedback.message }}
+    </div>
+  {% endif %}
+
+  {% if records %}
+    <div class="overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full min-w-[1100px] text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-4 py-3 font-medium">文件名</th>
+            <th class="px-4 py-3 font-medium">大小</th>
+            <th class="px-4 py-3 font-medium">状态</th>
+            <th class="px-4 py-3 font-medium">集合数</th>
+            <th class="px-4 py-3 font-medium">云端上传</th>
+            <th class="px-4 py-3 font-medium">开始时间</th>
+            <th class="px-4 py-3 font-medium">完成时间</th>
+            {% if show_action_col %}<th class="px-4 py-3 text-right font-medium">操作</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in records %}
+            {% set can_restore = item.status == "success" %}
+            <tr class="border-t border-slate-100 align-top">
+              <td class="px-4 py-3">
+                <div class="font-medium text-slate-900">{{ item.filename }}</div>
+                {% if item.error %}
+                  <div class="mt-1 text-xs text-red-500">{{ item.error }}</div>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-500">{{ item.size | fmt_bytes }}</td>
+              <td class="px-4 py-3">
+                {% if item.status == "success" %}
+                  <span class="tag" style="border-color: #2f855a; color: #2f855a;">成功</span>
+                {% elif item.status == "failed" %}
+                  <span class="tag" style="border-color: #c53030; color: #c53030;">失败</span>
+                {% else %}
+                  <span class="tag" style="border-color: #3182ce; color: #3182ce;">执行中</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-500">{{ item.collections | length }}</td>
+              <td class="px-4 py-3 text-xs text-slate-500">
+                {% if item.cloud_uploads %}
+                  {% for upload in item.cloud_uploads %}
+                    <div>
+                      <span class="font-medium">{{ upload.provider }}</span>：
+                      {% if upload.status == "success" %}
+                        <span class="text-emerald-600">成功</span>
+                      {% else %}
+                        <span class="text-red-500">失败</span>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-500">{{ item.started_at | fmt_dt }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ item.finished_at | fmt_dt or "-" }}</td>
+              {% if show_action_col %}
+                <td class="px-4 py-3 text-right">
+                  {% if backup_records_perm['restore'] %}
+                    <button
+                      class="btn-link {% if not can_restore %}pointer-events-none opacity-40{% endif %}"
+                      hx-post="/admin/backup/{{ item.id }}/restore"
+                      hx-target="#backup-table-container"
+                      hx-swap="innerHTML"
+                      hx-confirm="确认恢复该备份吗？当前业务集合数据将被覆盖。"
+                      hx-indicator="#global-indicator"
+                      hx-vals='{{ {"page": pagination.page, "page_size": pagination.page_size}|tojson }}'
+                      {% if not can_restore %}disabled title="仅成功备份可恢复"{% endif %}
+                    >
+                      恢复
+                    </button>
+                  {% endif %}
+                  {% if backup_records_perm['delete'] %}
+                    <button
+                      class="btn-link text-red-500 hover:text-red-600 {% if backup_records_perm['restore'] %}ml-3{% endif %}"
+                      hx-delete="/admin/backup/{{ item.id }}"
+                      hx-target="#backup-table-container"
+                      hx-swap="innerHTML"
+                      hx-confirm="确认删除该备份记录吗？"
+                      hx-indicator="#global-indicator"
+                      hx-vals='{{ {"page": pagination.page, "page_size": pagination.page_size}|tojson }}'
+                    >
+                      删除
+                    </button>
+                  {% endif %}
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+      <p class="text-lg font-semibold text-slate-800">暂无备份记录</p>
+      <p class="mt-2 text-sm text-slate-500">可点击“手动备份”创建第一份备份文件。</p>
+    </div>
+  {% endif %}
+
+  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/backup/table"
+        hx-target="#backup-table-container"
+        hx-swap="innerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"page": pagination.prev_page, "page_size": pagination.page_size}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/backup/table"
+          hx-target="#backup-table-container"
+          hx-swap="innerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"page": p, "page_size": pagination.page_size}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/backup/table"
+        hx-target="#backup-table-container"
+        hx-swap="innerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"page": pagination.next_page, "page_size": pagination.page_size}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
+</div>

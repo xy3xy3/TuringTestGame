@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn[standard]>=0.30
+jinja2>=3.1
+beanie>=1.27
+motor>=3.4
+python-dotenv>=1.0
+pydantic>=2.7
+passlib>=1.7.4
+python-multipart>=0.0.9
+itsdangerous>=2.2.0

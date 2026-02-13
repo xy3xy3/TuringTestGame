@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.pyre/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.venv/
+venv/
+ENV/
+.env
+.env.*
+!.env.example
+
+# uv
+.uv/
+uv.lock
+
+# Node
+node_modules/
+.pnpm-store/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+
+# refs: keep only .gitkeep
+refs/*
+!refs/.gitkeep
+
+# Backup artifacts
+backups/
+!backups/.gitkeep
+
+local/

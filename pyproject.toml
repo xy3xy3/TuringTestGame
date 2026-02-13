@@ -1,0 +1,36 @@
+[project]
+name = "pyfastadmin"
+version = "0.1.0"
+description = "HTMX + Alpine + Tailwind + FastAPI + Jinja2 + Beanie 管理后台"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.30",
+  "jinja2>=3.1",
+  "beanie>=1.27",
+  "motor>=3.4",
+  "python-dotenv>=1.0",
+  "pydantic>=2.7",
+  "passlib>=1.7.4",
+  "python-multipart>=0.0.9",
+  "itsdangerous>=2.2.0",
+  "alibabacloud-oss-v2>=1.2.4",
+  "cos-python-sdk-v5>=1.9.41",
+  "aiohttp>=3.13.3",
+]
+
+[project.urls]
+Homepage = ""
+
+[dependency-groups]
+dev = [
+    "asgi-lifespan>=2.1.0",
+    "httpx>=0.28.1",
+    "playwright>=1.58.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]

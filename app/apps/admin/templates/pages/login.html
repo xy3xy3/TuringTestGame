@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ request.state.csrf_token or '' }}" />
+    <title>管理员登录</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body class="antialiased">
+    <div class="mx-auto flex min-h-screen max-w-6xl items-center px-4 py-12 md:px-8">
+      <div class="grid w-full gap-10 md:grid-cols-[1.2fr_0.8fr]">
+        <div class="space-y-6">
+          <div class="chip">管理员入口</div>
+          <h1 class="font-display text-4xl leading-tight md:text-5xl">
+            欢迎回来，<span class="text-[rgb(var(--accent))]">继续管理</span> 权限体系
+          </h1>
+          <p class="text-base text-muted md:text-lg">
+            登录后进入 RBAC 控制台与管理员管理。
+          </p>
+          <div class="card p-5 text-sm text-muted">
+            <p class="font-semibold text-ink">说明</p>
+            <p>首次启动会自动创建默认账号，请及时修改密码。</p>
+          </div>
+        </div>
+
+        <div class="card p-6 md:p-8">
+          <h2 class="font-display text-2xl text-ink">管理员登录</h2>
+          <p class="mt-2 text-sm text-muted">请输入账号与密码继续。</p>
+
+          {% if error %}
+            <div class="mt-4 rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
+              {{ error }}
+            </div>
+          {% endif %}
+
+          <form class="mt-6 grid gap-4" method="post" action="/admin/login">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+            <input type="hidden" name="next" value="{{ next }}" />
+            <div>
+              <label class="label" for="login-username">账号</label>
+              <input id="login-username" name="username" class="input" required />
+            </div>
+            <div>
+              <label class="label" for="login-password">密码</label>
+              <input id="login-password" name="password" type="password" class="input" required />
+            </div>
+            <button type="submit" class="btn-primary w-full">登录</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,234 @@
+<div id="logs-table" class="card p-5" {% if request.state.permission_flags.operation_logs['delete'] %}data-bulk-scope{% endif %}>
+  {% set log_perm = request.state.permission_flags.operation_logs %}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">操作日志</h2>
+      <p class="mt-1 text-sm text-slate-500">共 {{ pagination.total }} 条记录</p>
+    </div>
+
+    <button
+      class="btn-ghost px-3"
+      hx-get="/admin/logs/table"
+      hx-target="#logs-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+      title="刷新"
+      aria-label="刷新"
+    >
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  {% if log_perm['delete'] %}
+    <form
+      class="mt-4 space-y-4 pb-20"
+    >
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+      <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
+      <input type="hidden" name="search_action" value="{{ filters.search_action }}" />
+      <input type="hidden" name="search_module" value="{{ filters.search_module }}" />
+      <input type="hidden" name="search_sort" value="{{ filters.search_sort }}" />
+      <input type="hidden" name="page" value="{{ pagination.page }}" />
+
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+        <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
+      </div>
+
+      {% if items %}
+        <div class="overflow-x-auto rounded-lg border border-slate-200">
+          <table class="w-full min-w-[1220px] text-left text-sm">
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="w-12 px-4 py-3 text-center font-medium">
+                  <input type="checkbox" class="h-4 w-4" data-bulk-master aria-label="全选本页" />
+                </th>
+                <th class="px-4 py-3 font-medium">时间</th>
+                <th class="px-4 py-3 font-medium">操作</th>
+                <th class="px-4 py-3 font-medium">模块</th>
+                <th class="px-4 py-3 font-medium">对象</th>
+                <th class="px-4 py-3 font-medium">操作者</th>
+                <th class="px-4 py-3 font-medium">来源</th>
+                <th class="px-4 py-3 font-medium">明细</th>
+                <th class="px-4 py-3 text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+                <tr class="border-t border-slate-100">
+                  <td class="px-4 py-3 text-center">
+                    <input type="checkbox" class="h-4 w-4" name="selected_ids" value="{{ item.id }}" data-bulk-item />
+                  </td>
+                  <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
+                  <td class="px-4 py-3">
+                    {% if item.action == "create" %}
+                      <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% elif item.action == "update" %}
+                      <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% elif item.action == "delete" %}
+                      <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% else %}
+                      <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
+                  <td class="px-4 py-3">
+                    <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
+                    <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
+                  <td class="px-4 py-3 text-xs text-slate-500">
+                    <div>{{ item.ip or "-" }}</div>
+                    <div class="mt-1">{{ item.method }} {{ item.path }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
+                  <td class="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      class="btn-link text-red-500 hover:text-red-600"
+                      hx-delete="/admin/logs/{{ item.id }}"
+                      hx-target="#logs-table"
+                      hx-swap="outerHTML"
+                      hx-confirm="确认删除该日志吗？"
+                      hx-indicator="#global-indicator"
+                      hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+                    >
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+          <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
+          <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
+        </div>
+      {% endif %}
+
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-20 hidden h-16 bg-slate-900/10 backdrop-blur-[2px]"
+        data-bulk-overlay
+        aria-hidden="true"
+      ></div>
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-30 hidden border-t border-slate-200/80 bg-white/65 shadow-[0_-8px_20px_rgba(15,23,42,0.12)] backdrop-blur-md"
+        data-bulk-bottom
+      >
+        <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
+          <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
+          <button
+            type="button"
+            class="btn-ghost text-red-500 hover:text-red-600"
+            data-bulk-submit
+            hx-post="/admin/logs/bulk-delete"
+            hx-include="closest form"
+            hx-target="#logs-table"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+            hx-confirm="确认批量删除已勾选的日志吗？"
+            disabled
+          >
+            批量删除
+          </button>
+        </div>
+      </div>
+    </form>
+  {% else %}
+    {% if items %}
+      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+        <table class="w-full min-w-[1150px] text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="px-4 py-3 font-medium">时间</th>
+              <th class="px-4 py-3 font-medium">操作</th>
+              <th class="px-4 py-3 font-medium">模块</th>
+              <th class="px-4 py-3 font-medium">对象</th>
+              <th class="px-4 py-3 font-medium">操作者</th>
+              <th class="px-4 py-3 font-medium">来源</th>
+              <th class="px-4 py-3 font-medium">明细</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr class="border-t border-slate-100">
+                <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
+                <td class="px-4 py-3">
+                  {% if item.action == "create" %}
+                    <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% elif item.action == "update" %}
+                    <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% elif item.action == "delete" %}
+                    <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% else %}
+                    <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
+                <td class="px-4 py-3">
+                  <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
+                  <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
+                <td class="px-4 py-3 text-xs text-slate-500">
+                  <div>{{ item.ip or "-" }}</div>
+                  <div class="mt-1">{{ item.method }} {{ item.path }}</div>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+        <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
+        <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/logs/table"
+        hx-target="#logs-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.prev_page}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/logs/table"
+          hx-target="#logs-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": p}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/logs/table"
+        hx-target="#logs-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.next_page}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
+</div>

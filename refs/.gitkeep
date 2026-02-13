@@ -1,0 +1,7 @@
+git clone https://github.com/bigskysoftware/htmx.git
+git clone https://github.com/alpinejs/alpine.git
+git clone https://github.com/tailwindlabs/tailwindcss.git
+git clone https://github.com/fastapi/fastapi.git
+git clone https://github.com/BeanieODM/beanie.git
+git clone https://github.com/microsoft/playwright-python.git
+git clone https://github.com/pytest-dev/pytest.git
