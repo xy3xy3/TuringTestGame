@@ -89,7 +89,7 @@ class GameManager:
         await sse_manager.publish(room_id, "game_starting", {
             "countdown": room.config.setup_duration,
             "phase": "setup",
-            "started_at": room.started_at.isoformat(),
+            "started_at": room.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         })
 
         # 启动灵魂注入倒计时
@@ -108,13 +108,14 @@ class GameManager:
         logger = logging.getLogger(__name__)
         logger.info(f"启动灵魂注入倒计时，房间 {room_id}，时长 {setup_time} 秒")
 
-        # 倒计时通知
+        # 倒计时通知（每 5 秒同步一次时间）
         for remaining in range(setup_time, 0, -5):
             logger.info(f"发送 countdown 事件：{remaining} 秒")
+            # 使用 ISO 格式 UTC 时间，确保前端能正确解析
             await sse_manager.publish(room_id, "countdown", {
                 "remaining": remaining,
                 "phase": "setup",
-                "started_at": started_at.isoformat() if started_at else None,
+                "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if started_at else None,
             })
             await asyncio.sleep(min(5, remaining))
 

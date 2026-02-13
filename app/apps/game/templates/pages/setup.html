@@ -92,12 +92,13 @@ const setupTime = {{ room.config.setup_duration }};
 let systemPrompt = '';
 let startedAt = null;
 let timerInterval = null;
+let hasNavigated = false;  // 防止重复跳转
 
-// 计算剩余时间
+// 计算剩余时间（基于服务器 UTC 时间戳）
 function getRemainingTime() {
   if (!startedAt) return setupTime;
   const now = Date.now();
-  const elapsed = (now - startedAt) / 1000; // 转换为秒
+  const elapsed = (now - startedAt) / 1000;  // 转换为秒
   const remaining = Math.max(0, Math.floor(setupTime - elapsed));
   return remaining;
 }
@@ -107,23 +108,38 @@ function updateCountdown() {
   const remaining = getRemainingTime();
   document.getElementById('countdown').textContent = remaining;
   document.getElementById('progress-bar').style.width = `${(remaining / setupTime) * 100}%`;
-  
-  if (remaining <= 0) {
+
+  // 倒计时结束，自动跳转
+  if (remaining <= 0 && !hasNavigated) {
+    hasNavigated = true;
     clearInterval(timerInterval);
+    // 给后端一点时间发送 game_playing 事件，但如果没收到也自动跳转
+    setTimeout(() => {
+      if (!hasNavigated) return;
+      window.location.href = `/game/${roomId}/play`;
+    }, 2000);
   }
 }
 
 // 初始化倒计时显示
 updateCountdown();
 
-// 页面加载时获取房间状态，如果已经在 setup 阶段则获取 started_at
+// 页面加载时获取房间状态
 fetch(`/game/api/${roomId}/state`)
   .then(res => res.json())
   .then(data => {
     if (data.success && data.room) {
       const room = data.room;
+      // 如果游戏已经在 playing 阶段，直接跳转
+      if (room.phase === 'playing') {
+        hasNavigated = true;
+        window.location.href = `/game/${roomId}/play`;
+        return;
+      }
+      // 如果已经在 setup 阶段且有开始时间，同步倒计时
       if (room.phase === 'setup' && room.started_at) {
-        startedAt = new Date(room.started_at).getTime();
+        // 使用 UTC 时间戳，避免时区问题
+        startedAt = new Date(room.started_at + 'Z').getTime();
         updateCountdown();
       }
     }
@@ -140,7 +156,8 @@ const eventSource = new EventSource(`/game/${roomId}/events`);
 eventSource.addEventListener('game_starting', (e) => {
   const data = JSON.parse(e.data);
   if (data.started_at) {
-    startedAt = new Date(data.started_at).getTime();
+    // 确保使用 UTC 时间
+    startedAt = new Date(data.started_at + 'Z').getTime();
     updateCountdown();
   }
 });
@@ -149,13 +166,16 @@ eventSource.addEventListener('game_starting', (e) => {
 eventSource.addEventListener('countdown', (e) => {
   const data = JSON.parse(e.data);
   if (data.started_at) {
-    startedAt = new Date(data.started_at).getTime();
+    // 确保使用 UTC 时间
+    startedAt = new Date(data.started_at + 'Z').getTime();
     updateCountdown();
   }
 });
 
 // 监听游戏进行事件（后端统一控制跳转）
 eventSource.addEventListener('game_playing', (e) => {
+  if (hasNavigated) return;
+  hasNavigated = true;
   if (timerInterval) clearInterval(timerInterval);
   window.location.href = `/game/${roomId}/play`;
 });
