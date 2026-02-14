@@ -617,6 +617,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
             "room_code": room.room_id,
             "phase": room.phase,
             "current_round": room.current_round,
+            "total_rounds": room.total_rounds,
             "config": room.config.model_dump(),
             "started_at": room.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if room.started_at else None,
         },
