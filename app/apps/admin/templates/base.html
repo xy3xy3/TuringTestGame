@@ -388,6 +388,23 @@
     </div>
     {% endif %}
 
+    {% set footer_text = request.state.footer_copyright_text | default("TuringTestGame", true) %}
+    {% set footer_url = request.state.footer_copyright_url | default("https://github.com/xy3xy3/TuringTestGame", true) %}
+    <footer class="px-4 pb-4 text-center text-xs text-slate-500">
+      {% if footer_url %}
+        <a
+          href="{{ footer_url }}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-blue-600"
+        >
+          {{ footer_text }}
+        </a>
+      {% else %}
+        <span>{{ footer_text }}</span>
+      {% endif %}
+    </footer>
+
     <div class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/45 px-4 py-6"
       x-show="modalOpen" x-cloak>
       <div

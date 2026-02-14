@@ -51,3 +51,57 @@ async def test_get_audit_log_actions_normalizes_config_value(monkeypatch) -> Non
     monkeypatch.setattr(config_service, 'find_config_item', fake_find_config_item)
 
     assert await config_service.get_audit_log_actions() == ['create', 'delete']
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_footer_copyright_returns_default_when_missing(monkeypatch) -> None:
+    """未配置页脚版权时，应该回退到默认文案和仓库链接。"""
+
+    async def fake_find_config_item(_group: str, _key: str):
+        return None
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    footer = await config_service.get_footer_copyright()
+
+    assert footer["text"] == config_service.FOOTER_COPYRIGHT_TEXT_DEFAULT
+    assert footer["url"] == config_service.FOOTER_COPYRIGHT_URL_DEFAULT
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_save_footer_copyright_updates_existing_items(monkeypatch) -> None:
+    """保存页脚版权时，应该规范化输入并更新已有配置项。"""
+
+    class FakeConfigItem:
+        def __init__(self, value: str) -> None:
+            self.value = value
+            self.name = ""
+            self.description = ""
+            self.updated_at = None
+            self.saved = False
+
+        async def save(self) -> None:
+            self.saved = True
+
+    text_item = FakeConfigItem("旧文案")
+    url_item = FakeConfigItem("https://old.example.com")
+
+    async def fake_find_config_item(_group: str, key: str):
+        if key == config_service.FOOTER_COPYRIGHT_TEXT_KEY:
+            return text_item
+        if key == config_service.FOOTER_COPYRIGHT_URL_KEY:
+            return url_item
+        return None
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    footer = await config_service.save_footer_copyright("  新版权文案  ", "   ")
+
+    assert footer["text"] == "新版权文案"
+    assert footer["url"] == config_service.FOOTER_COPYRIGHT_URL_DEFAULT
+    assert text_item.value == "新版权文案"
+    assert url_item.value == config_service.FOOTER_COPYRIGHT_URL_DEFAULT
+    assert text_item.saved is True
+    assert url_item.saved is True

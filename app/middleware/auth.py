@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
-from app.services import csrf_service, permission_service
+from app.services import config_service, csrf_service, permission_service
 
 
 def forbidden_response(request: Request, message: str) -> Response:
@@ -47,8 +47,26 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.exempt_paths = exempt_paths or set()
 
+    async def _inject_footer_config(self, request: Request) -> None:
+        """为 HTML 请求注入底部版权配置，供模板统一展示。"""
+        accept = str(request.headers.get("accept", "")).lower()
+        if "text/html" not in accept:
+            return
+
+        try:
+            footer = await config_service.get_footer_copyright()
+            request.state.footer_copyright_text = footer["text"]
+            request.state.footer_copyright_url = footer["url"]
+        except Exception:
+            # 配置读取失败时回退默认值，避免影响页面访问。
+            request.state.footer_copyright_text = config_service.FOOTER_COPYRIGHT_TEXT_DEFAULT
+            request.state.footer_copyright_url = config_service.FOOTER_COPYRIGHT_URL_DEFAULT
+
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
+
+        if not path.startswith("/static"):
+            await self._inject_footer_config(request)
 
         if path.startswith("/admin"):
             request.state.csrf_token = csrf_service.ensure_csrf_token(request.session)

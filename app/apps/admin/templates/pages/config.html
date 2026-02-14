@@ -75,6 +75,28 @@
           <input name="base_url" class="input" value="{{ base_url }}" placeholder="http://127.0.0.1:8000" {% if not config_perm['update'] %}readonly{% endif %} />
           <p class="text-xs text-slate-500 mt-1">用于生成邀请链接等外部访问地址，如：http://your-domain.com:8000</p>
         </div>
+        <div class="md:col-span-12">
+          <label class="label">底部版权文案</label>
+          <input
+            name="footer_copyright_text"
+            class="input"
+            value="{{ footer_copyright.text }}"
+            placeholder="TuringTestGame"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">用于页面底部展示文案，例如：Powered by TuringTestGame。</p>
+        </div>
+        <div class="md:col-span-12">
+          <label class="label">底部版权链接</label>
+          <input
+            name="footer_copyright_url"
+            class="input"
+            value="{{ footer_copyright.url }}"
+            placeholder="https://github.com/xy3xy3/TuringTestGame"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">底部版权点击后跳转地址，默认推广仓库链接。</p>
+        </div>
         <div class="md:col-span-8">
           <label class="label">SMTP 主机</label>
           <input name="smtp_host" class="input" value="{{ smtp.smtp_host }}" {% if not config_perm['update'] %}readonly{% endif %} />

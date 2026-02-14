@@ -138,6 +138,82 @@ async def save_base_url(url: str) -> str:
     return value
 
 
+# 站点底部版权配置（用于前后端页脚展示）
+FOOTER_COPYRIGHT_TEXT_KEY = "footer_copyright_text"
+FOOTER_COPYRIGHT_URL_KEY = "footer_copyright_url"
+FOOTER_COPYRIGHT_TEXT_DEFAULT = "TuringTestGame"
+FOOTER_COPYRIGHT_URL_DEFAULT = "https://github.com/xy3xy3/TuringTestGame"
+
+
+def _normalize_footer_copyright_text(text: str) -> str:
+    """规范化底部版权文案，空值时回退默认文案。"""
+    value = str(text or "").strip()
+    return value or FOOTER_COPYRIGHT_TEXT_DEFAULT
+
+
+def _normalize_footer_copyright_url(url: str) -> str:
+    """规范化底部版权链接，空值时回退默认仓库地址。"""
+    value = str(url or "").strip()
+    return value or FOOTER_COPYRIGHT_URL_DEFAULT
+
+
+async def get_footer_copyright() -> dict[str, str]:
+    """获取底部版权配置。"""
+    text_item = await find_config_item("system", FOOTER_COPYRIGHT_TEXT_KEY)
+    url_item = await find_config_item("system", FOOTER_COPYRIGHT_URL_KEY)
+    text = _normalize_footer_copyright_text(text_item.value if text_item else "")
+    url = _normalize_footer_copyright_url(url_item.value if url_item else "")
+    return {
+        "text": text,
+        "url": url,
+    }
+
+
+async def save_footer_copyright(text: str, url: str) -> dict[str, str]:
+    """保存底部版权配置。"""
+    normalized_text = _normalize_footer_copyright_text(text)
+    normalized_url = _normalize_footer_copyright_url(url)
+
+    text_item = await find_config_item("system", FOOTER_COPYRIGHT_TEXT_KEY)
+    if text_item:
+        text_item.value = normalized_text
+        text_item.name = "底部版权文案"
+        text_item.description = "用于页面底部展示的版权文案"
+        text_item.updated_at = utc_now()
+        await text_item.save()
+    else:
+        await ConfigItem(
+            key=FOOTER_COPYRIGHT_TEXT_KEY,
+            name="底部版权文案",
+            value=normalized_text,
+            group="system",
+            description="用于页面底部展示的版权文案",
+            updated_at=utc_now(),
+        ).insert()
+
+    url_item = await find_config_item("system", FOOTER_COPYRIGHT_URL_KEY)
+    if url_item:
+        url_item.value = normalized_url
+        url_item.name = "底部版权链接"
+        url_item.description = "用于页面底部展示的版权链接"
+        url_item.updated_at = utc_now()
+        await url_item.save()
+    else:
+        await ConfigItem(
+            key=FOOTER_COPYRIGHT_URL_KEY,
+            name="底部版权链接",
+            value=normalized_url,
+            group="system",
+            description="用于页面底部展示的版权链接",
+            updated_at=utc_now(),
+        ).insert()
+
+    return {
+        "text": normalized_text,
+        "url": normalized_url,
+    }
+
+
 # 游戏时间配置（各阶段时长）
 GAME_TIME_CONFIG_KEYS = {
     "setup_duration": ("灵魂注入时长", 60, 30, 300),

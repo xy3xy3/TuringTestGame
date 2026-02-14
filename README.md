@@ -4,6 +4,10 @@
 
 技术栈：FastAPI + Jinja2 + HTMX + Alpine.js + Tailwind + MongoDB(Beanie)。
 
+## 在线体验
+
+- 游戏体验网址：`https://turinggame.skywc.com`
+
 ## 主要功能
 
 后台（`/admin`）
@@ -144,4 +148,3 @@ docker compose --env-file ../../.env up -d --build
 ## License
 
 本项目使用 GNU GPLv3 许可证，见 `LICENSE`。
-

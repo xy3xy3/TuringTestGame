@@ -82,6 +82,7 @@ async def config_page(request: Request) -> HTMLResponse:
     backup_config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
+    footer_copyright = await config_service.get_footer_copyright()
     cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
@@ -97,6 +98,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
         "base_url": base_url,
+        "footer_copyright": footer_copyright,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
     }
@@ -121,6 +123,8 @@ async def config_save(
     smtp_from: str = Form(""),
     smtp_ssl: str = Form(""),
     base_url: str = Form(""),
+    footer_copyright_text: str = Form(""),
+    footer_copyright_url: str = Form(""),
 ) -> HTMLResponse:
     """保存系统配置（SMTP + 日志策略 + 备份设置）。"""
     form_data = await request.form()
@@ -145,6 +149,7 @@ async def config_save(
     audit_actions = await config_service.save_audit_log_actions(selected_actions)
     await backup_service.save_backup_config(backup_payload)
     await config_service.save_base_url(base_url)
+    await config_service.save_footer_copyright(footer_copyright_text, footer_copyright_url)
 
     # 保存清理配置
     cleanup_enabled = form_data.get("cleanup_enabled") == "on"
@@ -173,6 +178,7 @@ async def config_save(
     backup_config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
+    footer_copyright = await config_service.get_footer_copyright()
     cleanup_config = await config_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
     context = {
@@ -186,6 +192,7 @@ async def config_save(
         "cloud_provider_labels": CLOUD_PROVIDER_LABELS,
         "active_config_tab": active_config_tab,
         "base_url": base_url,
+        "footer_copyright": footer_copyright,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
     }
