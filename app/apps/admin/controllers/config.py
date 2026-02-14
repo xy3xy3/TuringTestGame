@@ -87,6 +87,7 @@ async def config_page(request: Request) -> HTMLResponse:
     rate_limit_config = await config_service.get_rate_limit_config()
     cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
+    game_role_balance_config = await config_service.get_game_role_balance_config()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
 
     context = {
@@ -104,6 +105,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "rate_limit_config": rate_limit_config,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
+        "game_role_balance_config": game_role_balance_config,
     }
     await log_service.record_request(
         request,
@@ -185,6 +187,13 @@ async def config_save(
         "reveal_delay": int(form_data.get("reveal_delay", "3") or "3"),
     }
     await config_service.save_game_time_config(game_time_payload)
+    game_role_balance_payload = {
+        "pity_gap_threshold": form_data.get("role_pity_gap_threshold", "2"),
+        "weight_base": form_data.get("role_weight_base", "100"),
+        "weight_deficit_step": form_data.get("role_weight_deficit_step", "40"),
+        "weight_zero_bonus": form_data.get("role_weight_zero_bonus", "60"),
+    }
+    await config_service.save_game_role_balance_config(game_role_balance_payload)
 
     restart_scheduler()
 
@@ -196,6 +205,7 @@ async def config_save(
     rate_limit_config = await config_service.get_rate_limit_config()
     cleanup_config = await config_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
+    game_role_balance_config = await config_service.get_game_role_balance_config()
     context = {
         **base_context(request),
         "smtp": smtp,
@@ -211,6 +221,7 @@ async def config_save(
         "rate_limit_config": rate_limit_config,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
+        "game_role_balance_config": game_role_balance_config,
     }
     detail = (
         f"更新系统配置（tab={active_config_tab}，含备份参数），日志类型："

@@ -80,8 +80,9 @@ async def create_room(
     if len(nickname) < 2:
         return {"success": False, "error": "昵称至少需要2个字符"}
 
-    # 获取系统配置的游戏时间
+    # 获取系统配置的游戏时间和角色保底参数
     game_time_config = await config_service.get_game_time_config()
+    role_balance_config = await config_service.get_game_role_balance_config()
 
     room_code = generate_room_code()
 
@@ -99,6 +100,10 @@ async def create_room(
         answer_duration=game_time_config.get("answer_duration", 45),
         vote_duration=game_time_config.get("vote_duration", 15),
         reveal_delay=game_time_config.get("reveal_delay", 3),
+        role_pity_gap_threshold=role_balance_config.get("pity_gap_threshold", 2),
+        role_weight_base=role_balance_config.get("weight_base", 100),
+        role_weight_deficit_step=role_balance_config.get("weight_deficit_step", 40),
+        role_weight_zero_bonus=role_balance_config.get("weight_zero_bonus", 60),
     )
 
     # 创建房间（先创建，获取 room id 后再创建玩家）

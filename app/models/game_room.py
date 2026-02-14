@@ -32,6 +32,10 @@ class GameConfig(BaseModel):
     min_players: int = Field(default=2, ge=2, le=16)
     max_players: int = Field(default=8, ge=2, le=16)
     rounds_per_game: int = Field(default=0, ge=0, le=20)
+    role_pity_gap_threshold: int = Field(default=2, ge=1, le=10)
+    role_weight_base: int = Field(default=100, ge=1, le=10000)
+    role_weight_deficit_step: int = Field(default=40, ge=0, le=10000)
+    role_weight_zero_bonus: int = Field(default=60, ge=0, le=10000)
 
 
 class GameRoom(Document):

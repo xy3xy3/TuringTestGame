@@ -58,6 +58,19 @@ sse_manager = SSEManager()
 class GameManager:
     """游戏状态管理器。"""
 
+    ROLE_BALANCE_DEFAULTS: dict[str, int] = {
+        "pity_gap_threshold": 2,
+        "weight_base": 100,
+        "weight_deficit_step": 40,
+        "weight_zero_bonus": 60,
+    }
+    ROLE_BALANCE_LIMITS: dict[str, tuple[int, int]] = {
+        "pity_gap_threshold": (1, 10),
+        "weight_base": (1, 10000),
+        "weight_deficit_step": (0, 10000),
+        "weight_zero_bonus": (0, 10000),
+    }
+
     def __init__(self):
         self._timers: dict[str, asyncio.Task] = {}
 
@@ -88,6 +101,97 @@ class GameManager:
         """启动新的定时器，先取消旧的。"""
         self._cancel_timer(room_id)
         self._timers[room_id] = asyncio.create_task(coro)
+
+    def _get_role_count(self, player: GamePlayer, role: str) -> int:
+        """获取玩家在指定角色的历史担任次数。"""
+        if role == "interrogator":
+            return max(0, int(player.times_as_interrogator or 0))
+        return max(0, int(player.times_as_subject or 0))
+
+    def _resolve_role_balance_settings(self, room_config: Any | None) -> dict[str, int]:
+        """解析并裁剪角色伪随机保底参数。"""
+        resolved: dict[str, int] = {}
+        for key, default in self.ROLE_BALANCE_DEFAULTS.items():
+            min_val, max_val = self.ROLE_BALANCE_LIMITS[key]
+            raw = getattr(room_config, f"role_{key}", default) if room_config else default
+            try:
+                parsed = int(raw)
+            except Exception:
+                parsed = default
+            resolved[key] = max(min_val, min(max_val, parsed))
+        return resolved
+
+    def _choose_player_with_pity(
+        self,
+        players: list[GamePlayer],
+        role: str,
+        settings: dict[str, int],
+        exclude_player_id: str | None = None,
+    ) -> GamePlayer:
+        """按“伪随机 + 保底”机制选择玩家。
+
+        规则：
+        1) 若最高次数与最低次数差值 >= 2，触发硬保底，仅在最低次数池中随机。
+        2) 否则使用加权随机，历史次数越少，权重越高。
+        """
+        candidates = [
+            player
+            for player in players
+            if exclude_player_id is None or str(player.id) != exclude_player_id
+        ]
+        if not candidates:
+            raise ValueError("没有可用的候选玩家")
+
+        counts = [self._get_role_count(player, role) for player in candidates]
+        min_count = min(counts)
+        max_count = max(counts)
+        pity_gap_threshold = settings["pity_gap_threshold"]
+
+        # 差值达到阈值时启动硬保底，避免长期抽不到角色。
+        if max_count - min_count >= pity_gap_threshold:
+            pity_pool = [
+                player for player in candidates if self._get_role_count(player, role) == min_count
+            ]
+            return random.choice(pity_pool)
+
+        weight_base = settings["weight_base"]
+        weight_deficit_step = settings["weight_deficit_step"]
+        weight_zero_bonus = settings["weight_zero_bonus"]
+        weights: list[int] = []
+        for player in candidates:
+            count = self._get_role_count(player, role)
+            deficit = max_count - count
+            weight = weight_base + deficit * weight_deficit_step
+            if count == 0:
+                weight += weight_zero_bonus
+            weights.append(weight)
+        return random.choices(candidates, weights=weights, k=1)[0]
+
+    def _select_round_roles(
+        self,
+        players: list[GamePlayer],
+        room_config: Any | None = None,
+    ) -> tuple[GamePlayer, GamePlayer]:
+        """选择本轮提问者和被测者。"""
+        if len(players) < 2:
+            raise ValueError("玩家数不足")
+
+        settings = self._resolve_role_balance_settings(room_config)
+        interrogator = self._choose_player_with_pity(players, role="interrogator", settings=settings)
+        subject = self._choose_player_with_pity(
+            players,
+            role="subject",
+            settings=settings,
+            exclude_player_id=str(interrogator.id),
+        )
+        return interrogator, subject
+
+    async def _mark_role_usage(self, interrogator: GamePlayer, subject: GamePlayer):
+        """记录本轮角色分配次数，用于后续伪随机保底。"""
+        interrogator.times_as_interrogator = int(interrogator.times_as_interrogator or 0) + 1
+        subject.times_as_subject = int(subject.times_as_subject or 0) + 1
+        await interrogator.save()
+        await subject.save()
 
     async def start_game(self, room_id: str) -> dict[str, Any]:
         """开始游戏。
@@ -178,10 +282,8 @@ class GameManager:
         room.current_round = 1
         await room.save()
 
-        # 随机选择提问者和被测者
-        random.shuffle(players)
-        interrogator = players[0]
-        subject = players[1]
+        # 使用伪随机保底机制选择提问者和被测者
+        interrogator, subject = self._select_round_roles(players, room.config)
 
         # 创建回合记录（使用 6 位房间码 room_id，而非 MongoDB ObjectId）
         game_round = GameRound(
@@ -192,6 +294,7 @@ class GameManager:
             status="questioning",
         )
         await game_round.insert()
+        await self._mark_role_usage(interrogator, subject)
 
         # 通知所有玩家游戏开始（包含回合信息，前端收到后直接跳转并显示）
         question_duration = self._resolve_duration(room.config.question_duration, "TEST_GAME_QUESTION_DURATION")
@@ -675,10 +778,8 @@ class GameManager:
         room.current_round += 1
         await room.save()
     
-        # 随机选择提问者和被测者（轮换）
-        random.shuffle(players)
-        interrogator = players[0]
-        subject = players[1]
+        # 使用伪随机保底机制选择提问者和被测者
+        interrogator, subject = self._select_round_roles(players, room.config)
     
         # 创建回合记录
         game_round = GameRound(
@@ -689,6 +790,7 @@ class GameManager:
             status="questioning",
         )
         await game_round.insert()
+        await self._mark_role_usage(interrogator, subject)
     
         # 通知所有玩家
         question_duration = self._resolve_duration(room.config.question_duration, "TEST_GAME_QUESTION_DURATION")

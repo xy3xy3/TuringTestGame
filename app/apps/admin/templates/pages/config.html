@@ -658,6 +658,70 @@
         </div>
       </div>
 
+      <div class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">角色伪随机保底参数</h3>
+            <p class="text-xs text-slate-500 mt-1">用于提问者/被测者选角。参数越大，系统越倾向于补偿历史被抽中次数少的玩家。</p>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-4 md:grid-cols-12">
+          <div class="md:col-span-6 lg:col-span-3">
+            <label class="label">硬保底触发差值</label>
+            <input
+              name="role_pity_gap_threshold"
+              type="number"
+              min="1"
+              max="10"
+              class="input"
+              value="{{ game_role_balance_config.pity_gap_threshold }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">当最高与最低次数差值达到该值时，仅从最低次数池抽取。</p>
+          </div>
+          <div class="md:col-span-6 lg:col-span-3">
+            <label class="label">权重基础值</label>
+            <input
+              name="role_weight_base"
+              type="number"
+              min="1"
+              max="10000"
+              class="input"
+              value="{{ game_role_balance_config.weight_base }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">所有候选玩家共有的基础权重。</p>
+          </div>
+          <div class="md:col-span-6 lg:col-span-3">
+            <label class="label">次数差权重增量</label>
+            <input
+              name="role_weight_deficit_step"
+              type="number"
+              min="0"
+              max="10000"
+              class="input"
+              value="{{ game_role_balance_config.weight_deficit_step }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">每少 1 次角色经历，额外增加的权重。</p>
+          </div>
+          <div class="md:col-span-6 lg:col-span-3">
+            <label class="label">零次数额外权重</label>
+            <input
+              name="role_weight_zero_bonus"
+              type="number"
+              min="0"
+              max="10000"
+              class="input"
+              value="{{ game_role_balance_config.weight_zero_bonus }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">从未担任过该角色的玩家额外补偿权重。</p>
+          </div>
+        </div>
+      </div>
+
       <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 class="text-sm font-semibold text-blue-800 mb-2">
           <i class="fa-solid fa-info-circle mr-1"></i>配置说明

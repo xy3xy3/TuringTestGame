@@ -205,3 +205,94 @@ async def test_save_rate_limit_config_updates_existing_items(monkeypatch) -> Non
     assert items["window_seconds"].value == "120"
     assert items["max_requests"].value == "240"
     assert all(item.saved for item in items.values())
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_game_role_balance_config_returns_default_when_missing(monkeypatch) -> None:
+    """未配置角色保底参数时应返回默认值。"""
+
+    async def fake_find_config_item(_group: str, _key: str):
+        return None
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.get_game_role_balance_config()
+
+    assert config["pity_gap_threshold"] == 2
+    assert config["weight_base"] == 100
+    assert config["weight_deficit_step"] == 40
+    assert config["weight_zero_bonus"] == 60
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_game_role_balance_config_normalizes_dirty_values(monkeypatch) -> None:
+    """读取角色保底参数时应完成类型转换与边界裁剪。"""
+
+    raw = {
+        "pity_gap_threshold": "-1",
+        "weight_base": "abc",
+        "weight_deficit_step": "50001",
+        "weight_zero_bonus": "0",
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        if key in raw:
+            return SimpleNamespace(value=raw[key])
+        return None
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.get_game_role_balance_config()
+
+    assert config["pity_gap_threshold"] == 1
+    assert config["weight_base"] == 100
+    assert config["weight_deficit_step"] == 10000
+    assert config["weight_zero_bonus"] == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_save_game_role_balance_config_updates_existing_items(monkeypatch) -> None:
+    """保存角色保底参数时应更新已有配置项并规范化值。"""
+
+    class FakeConfigItem:
+        def __init__(self, value: str) -> None:
+            self.value = value
+            self.name = ""
+            self.description = ""
+            self.updated_at = None
+            self.saved = False
+
+        async def save(self) -> None:
+            self.saved = True
+
+    items = {
+        key: FakeConfigItem(str(default))
+        for key, (_name, default, _minimum, _maximum) in config_service.GAME_ROLE_BALANCE_CONFIG_KEYS.items()
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        return items.get(key)
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.save_game_role_balance_config(
+        {
+            "pity_gap_threshold": "4",
+            "weight_base": "180",
+            "weight_deficit_step": "77",
+            "weight_zero_bonus": "95",
+        }
+    )
+
+    assert config["pity_gap_threshold"] == 4
+    assert config["weight_base"] == 180
+    assert config["weight_deficit_step"] == 77
+    assert config["weight_zero_bonus"] == 95
+    assert items["pity_gap_threshold"].value == "4"
+    assert items["weight_base"].value == "180"
+    assert items["weight_deficit_step"].value == "77"
+    assert items["weight_zero_bonus"].value == "95"
+    assert all(item.saved for item in items.values())

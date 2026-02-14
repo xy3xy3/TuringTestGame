@@ -363,3 +363,55 @@ async def save_game_time_config(config: dict[str, int]) -> dict[str, int]:
             ).insert()
 
     return await get_game_time_config()
+
+
+# 游戏角色伪随机保底配置（提问者/被测者选角）
+GAME_ROLE_BALANCE_CONFIG_GROUP = "game_role_balance"
+GAME_ROLE_BALANCE_CONFIG_KEYS = {
+    "pity_gap_threshold": ("硬保底触发差值", 2, 1, 10),
+    "weight_base": ("权重基础值", 100, 1, 10000),
+    "weight_deficit_step": ("次数差权重增量", 40, 0, 10000),
+    "weight_zero_bonus": ("零次数额外权重", 60, 0, 10000),
+}
+
+
+def _normalize_game_role_balance_config(payload: dict[str, object]) -> dict[str, int]:
+    """规范化游戏角色伪随机保底配置。"""
+    normalized: dict[str, int] = {}
+    for key, (_name, default, minimum, maximum) in GAME_ROLE_BALANCE_CONFIG_KEYS.items():
+        normalized[key] = _to_int(payload.get(key), default=default, minimum=minimum, maximum=maximum)
+    return normalized
+
+
+async def get_game_role_balance_config() -> dict[str, int]:
+    """获取游戏角色伪随机保底配置。"""
+    payload: dict[str, object] = {}
+    for key in GAME_ROLE_BALANCE_CONFIG_KEYS:
+        item = await find_config_item(GAME_ROLE_BALANCE_CONFIG_GROUP, key)
+        if item:
+            payload[key] = item.value
+    return _normalize_game_role_balance_config(payload)
+
+
+async def save_game_role_balance_config(payload: dict[str, object]) -> dict[str, int]:
+    """保存游戏角色伪随机保底配置。"""
+    normalized = _normalize_game_role_balance_config(payload)
+    for key, value in normalized.items():
+        name, _default, minimum, maximum = GAME_ROLE_BALANCE_CONFIG_KEYS[key]
+        item = await find_config_item(GAME_ROLE_BALANCE_CONFIG_GROUP, key)
+        if item:
+            item.value = str(value)
+            item.name = name
+            item.description = f"游戏选角保底配置：{name}（范围 {minimum}-{maximum}）"
+            item.updated_at = utc_now()
+            await item.save()
+        else:
+            await ConfigItem(
+                key=key,
+                name=name,
+                value=str(value),
+                group=GAME_ROLE_BALANCE_CONFIG_GROUP,
+                description=f"游戏选角保底配置：{name}（范围 {minimum}-{maximum}）",
+                updated_at=utc_now(),
+            ).insert()
+    return normalized
