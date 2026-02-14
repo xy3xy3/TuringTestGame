@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -38,7 +39,27 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-app = FastAPI(title=APP_NAME)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动时初始化，停止时清理资源。"""
+    # 启动时执行
+    await init_db()
+    await ensure_default_roles()
+    await ensure_default_admin()
+    start_scheduler()
+    start_cleanup_scheduler()
+
+    yield
+
+    # 停止时执行
+    stop_scheduler()
+    stop_cleanup_scheduler()
+    await close_redis_client()
+    await close_db()
+
+
+app = FastAPI(title=APP_NAME, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.add_middleware(GameRateLimitMiddleware)
 app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout", "/game", "/game/create", "/game/join", "/game/api"})
@@ -58,22 +79,3 @@ app.include_router(game_rooms_router)
 async def root() -> RedirectResponse:
     """根路径统一跳转到游戏首页。"""
     return RedirectResponse(url="/game", status_code=302)
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    """应用启动时初始化数据库、默认数据和备份调度器。"""
-    await init_db()
-    await ensure_default_roles()
-    await ensure_default_admin()
-    start_scheduler()
-    start_cleanup_scheduler()
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    """应用停止时关闭备份调度器与数据库连接。"""
-    stop_scheduler()
-    stop_cleanup_scheduler()
-    await close_redis_client()
-    await close_db()

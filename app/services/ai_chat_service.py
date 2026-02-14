@@ -136,14 +136,13 @@ async def call_ai(
 async def calculate_display_delay(answer_type: str, submit_time_seconds: float) -> float:
     """计算回答显示延迟（防作弊机制）。
 
-    规则：
-    1. AI 代答：随机延迟 5-15 秒
-    2. 真人回答：最低显示 5 秒延迟（如果提交过快）
-    3. 统一再加 0-3 秒网络延迟模拟
+    当前规则（统一随机，不区分 AI/真人）：
+    1. 回答阶段倒计时结束后，再进入“用户输入中”随机等待
+    2. 随机区间固定，避免通过点击快慢推断回答类型
 
     Args:
-        answer_type: "ai" 或 "human"
-        submit_time_seconds: 提交时经过的秒数
+        answer_type: 兼容保留参数（当前不参与计算）
+        submit_time_seconds: 兼容保留参数（当前不参与计算）
 
     Returns:
         延迟秒数
@@ -158,17 +157,5 @@ async def calculate_display_delay(answer_type: str, submit_time_seconds: float) 
                 pass
         return 0.0
 
-    base_delay = 0.0
-
-    if answer_type == "ai":
-        # AI 生成可能需要一些时间，模拟"思考"
-        base_delay = random.uniform(5, 15)
-    else:
-        # 真人回答：如果提交过快，强制等待
-        if submit_time_seconds < 5:
-            base_delay = 5 - submit_time_seconds
-
-    # 额外网络延迟模拟
-    network_delay = random.uniform(0, 3)
-
-    return base_delay + network_delay
+    # 统一随机“输入中”时长，避免回答类型被时长侧信道推断。
+    return random.uniform(2, 8)

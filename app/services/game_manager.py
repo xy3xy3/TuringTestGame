@@ -450,8 +450,20 @@ class GameManager:
                 game_round.answer_submitted_at = datetime.now(timezone.utc)
                 await game_round.save()
 
-            # 进入投票阶段
-            await self._start_voting_phase(room_id, round_id)
+            if not game_round:
+                return
+
+            # 倒计时结束后统一进入随机“输入中”展示期，避免根据提交快慢推断回答类型。
+            display_delay = await ai_chat_service.calculate_display_delay(
+                answer_type=str(game_round.answer_type or ""),
+                submit_time_seconds=0.0,
+            )
+            await sse_manager.publish(room_id, "answer_submitted", {
+                "display_delay": display_delay,
+            })
+
+            # 延迟后显示回答，再进入投票阶段。
+            asyncio.create_task(self._delayed_answer_display(room_id, round_id, display_delay))
         except asyncio.CancelledError:
             # 定时器被取消，正常退出
             pass
@@ -474,7 +486,7 @@ class GameManager:
             answer_content: 手动回答的内容（当 answer_type 为 "human" 时需要）
     
         Returns:
-            {"success": True, "display_delay": float} 或 {"success": False, "error": "..."}
+            {"success": True} 或 {"success": False, "error": "..."}
         """
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if not game_round:
@@ -490,18 +502,6 @@ class GameManager:
         room = await game_room_service.get_room_by_id(room_id)
         if not room:
             return {"success": False, "error": "房间不存在"}
-    
-        # 计算提交时间
-        submit_time = 0
-        if game_round.question_at:
-            question_at = game_round.question_at
-            # 如果 question_at 没有时区信息，假设为 UTC
-            if question_at.tzinfo is None:
-                question_at = question_at.replace(tzinfo=timezone.utc)
-            submit_time = (datetime.now(timezone.utc) - question_at).total_seconds()
-    
-        # 获取延迟
-        display_delay = await ai_chat_service.calculate_display_delay(answer_type, submit_time)
     
         # 根据类型处理回答
         if answer_type == "ai":
@@ -531,19 +531,8 @@ class GameManager:
 
         game_round.answer_submitted_at = datetime.now(timezone.utc)
         await game_round.save()
-
-        # 回答已提交后立即终止回答阶段倒计时，避免超时逻辑与正常流程并发触发。
-        self._cancel_timer(room_id)
-
-        # 通知所有玩家回答已提交（显示"正在输入..."）
-        await sse_manager.publish(room_id, "answer_submitted", {
-            "display_delay": display_delay,
-        })
-
-        # 延迟后显示回答
-        asyncio.create_task(self._delayed_answer_display(room_id, round_id, display_delay))
-
-        return {"success": True, "display_delay": display_delay}
+        # 注意：回答阶段倒计时必须走完；随机“输入中”展示由倒计时结束后统一触发。
+        return {"success": True}
 
     async def _delayed_answer_display(self, room_id: str, round_id: str, delay: float):
         """延迟显示回答。"""

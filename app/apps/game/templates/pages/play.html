@@ -336,8 +336,21 @@ function connectSSE() {
   });
 
   eventSource.addEventListener('answer_submitted', (e) => {
+    const data = JSON.parse(e.data || '{}');
     document.getElementById('loading-area').classList.remove('hidden');
     document.getElementById('answer-content').classList.add('hidden');
+
+    // 回答阶段计时归零后，统一展示随机“输入中”时长，避免通过点击快慢猜测回答类型。
+    const typingDelay = Math.max(0, Math.ceil(Number(data.display_delay || 0)));
+    document.getElementById('phase-display').textContent = '输入中';
+    if (typingDelay > 0) {
+      startLocalCountdown(typingDelay, typingDelay);
+    } else {
+      stopLocalCountdown();
+      countdownRemaining = 0;
+      countdownTotal = 1;
+      updateCountdownDisplay();
+    }
   });
 
   eventSource.addEventListener('new_answer', (e) => {
@@ -563,7 +576,7 @@ async function submitAIAnswer() {
   // 立即隐藏选择区域，防止重复点击
   document.getElementById('answer-choice-area').classList.add('hidden');
   document.getElementById('wait-area').classList.remove('hidden');
-  document.getElementById('wait-area').querySelector('p').textContent = '已选择AI回答，等待生成...';
+  document.getElementById('wait-area').querySelector('p').textContent = '已提交回答，等待本阶段倒计时结束...';
 
   await fetch(`/game/${roomId}/answer`, {
     method: 'POST',
@@ -581,7 +594,7 @@ async function submitHumanAnswer() {
   // 立即隐藏输入区域，防止重复点击
   document.getElementById('answer-input-area').classList.add('hidden');
   document.getElementById('wait-area').classList.remove('hidden');
-  document.getElementById('wait-area').querySelector('p').textContent = '已提交回答，等待投票...';
+  document.getElementById('wait-area').querySelector('p').textContent = '已提交回答，等待本阶段倒计时结束...';
 
   await fetch(`/game/${roomId}/answer`, {
     method: 'POST',
@@ -683,7 +696,35 @@ async function initGameState() {
   }
 }
 
+// 回答区仅允许手动输入，禁止粘贴/拖拽注入文本（提问区不受影响）。
+function lockAnswerInputPaste() {
+  const answerInput = document.getElementById('answer-input');
+  if (!answerInput) return;
+
+  const blockPasteLikeInput = (event) => {
+    const inputType = String(event.inputType || '');
+    if (inputType === 'insertFromPaste' || inputType === 'insertFromDrop') {
+      event.preventDefault();
+    }
+  };
+
+  answerInput.addEventListener('beforeinput', blockPasteLikeInput);
+  answerInput.addEventListener('paste', (event) => event.preventDefault());
+  answerInput.addEventListener('drop', (event) => event.preventDefault());
+  answerInput.addEventListener('keydown', (event) => {
+    const key = String(event.key || '').toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === 'v') {
+      event.preventDefault();
+      return;
+    }
+    if (event.shiftKey && key === 'insert') {
+      event.preventDefault();
+    }
+  });
+}
+
 // 页面加载时先获取状态，再连接 SSE
+lockAnswerInputPaste();
 initGameState().then(() => {
   connectSSE();
 });
