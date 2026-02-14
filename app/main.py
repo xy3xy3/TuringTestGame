@@ -51,7 +51,8 @@ app.include_router(backup_router)
 
 @app.get("/")
 async def root() -> RedirectResponse:
-    return RedirectResponse(url="/admin/dashboard", status_code=302)
+    """根路径统一跳转到游戏首页。"""
+    return RedirectResponse(url="/game", status_code=302)
 
 
 @app.on_event("startup")
