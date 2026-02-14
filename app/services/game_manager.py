@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
 from datetime import datetime, timezone
 from typing import Any
@@ -60,6 +61,21 @@ class GameManager:
     def __init__(self):
         self._timers: dict[str, asyncio.Task] = {}
 
+    def _resolve_duration(self, default_seconds: int, env_key: str) -> int:
+        """解析测试环境的阶段时长覆盖配置。"""
+        if os.getenv("APP_ENV", "").strip().lower() != "test":
+            return default_seconds
+
+        raw = os.getenv(env_key, "").strip()
+        if not raw:
+            return default_seconds
+
+        try:
+            seconds = int(raw)
+        except ValueError:
+            return default_seconds
+        return seconds if seconds > 0 else default_seconds
+
     def _cancel_timer(self, room_id: str):
         """取消房间正在运行的定时器。"""
         if room_id in self._timers:
@@ -97,25 +113,28 @@ class GameManager:
         room.started_at = datetime.now(timezone.utc)
         await room.save()
 
+        setup_duration = self._resolve_duration(room.config.setup_duration, "TEST_GAME_SETUP_DURATION")
+
         # 通知所有玩家（使用 MongoDB ObjectId）
         await sse_manager.publish(room_id, "game_starting", {
-            "countdown": room.config.setup_duration,
+            "countdown": setup_duration,
             "phase": "setup",
             "started_at": room.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         })
 
         # 启动灵魂注入倒计时
-        self._start_timer(room_id, self._start_setup_timer(room_id))
+        self._start_timer(room_id, self._start_setup_timer(room_id, setup_duration))
         return {"success": True}
 
-    async def _start_setup_timer(self, room_id: str):
+    async def _start_setup_timer(self, room_id: str, setup_time: int | None = None):
         """启动灵魂注入阶段倒计时。"""
         try:
             room = await game_room_service.get_room_by_id(room_id)
             if not room:
                 return
 
-            setup_time = room.config.setup_duration
+            if setup_time is None:
+                setup_time = self._resolve_duration(room.config.setup_duration, "TEST_GAME_SETUP_DURATION")
             started_at = room.started_at
             import logging
             logger = logging.getLogger(__name__)
@@ -175,6 +194,7 @@ class GameManager:
         await game_round.insert()
 
         # 通知所有玩家游戏开始（包含回合信息，前端收到后直接跳转并显示）
+        question_duration = self._resolve_duration(room.config.question_duration, "TEST_GAME_QUESTION_DURATION")
         await sse_manager.publish(room_id, "game_start", {
             "room_id": room_id,
             "round_id": str(game_round.id),
@@ -183,7 +203,7 @@ class GameManager:
             "interrogator_nickname": interrogator.nickname,
             "subject_id": str(subject.id),
             "subject_nickname": subject.nickname,
-            "question_time": room.config.question_duration,
+            "question_time": question_duration,
         })
 
         # 启动提问倒计时
@@ -196,7 +216,7 @@ class GameManager:
             if not room:
                 return
 
-            question_time = room.config.question_duration
+            question_time = self._resolve_duration(room.config.question_duration, "TEST_GAME_QUESTION_DURATION")
 
             # 倒计时通知（每秒更新）
             for remaining in range(question_time, 0, -1):
@@ -275,11 +295,12 @@ class GameManager:
         await game_round.save()
 
         # 通知被测者
+        answer_duration = self._resolve_duration(room.config.answer_duration, "TEST_GAME_ANSWER_DURATION")
         await sse_manager.publish(room_id, "answer_phase", {
             "round_id": round_id,
             "subject_id": game_round.subject_id,
             "question": game_round.question,
-            "answer_time": room.config.answer_duration,
+            "answer_time": answer_duration,
         })
 
         # 启动回答倒计时
@@ -292,7 +313,7 @@ class GameManager:
             if not room:
                 return
 
-            answer_time = room.config.answer_duration
+            answer_time = self._resolve_duration(room.config.answer_duration, "TEST_GAME_ANSWER_DURATION")
 
             # 倒计时通知（每秒更新）
             for remaining in range(answer_time, 0, -1):
@@ -444,9 +465,10 @@ class GameManager:
         await game_round.save()
 
         # 通知所有玩家投票
+        vote_duration = self._resolve_duration(room.config.vote_duration, "TEST_GAME_VOTE_DURATION")
         await sse_manager.publish(room_id, "voting_phase", {
             "round_id": round_id,
-            "vote_time": room.config.vote_duration,
+            "vote_time": vote_duration,
         })
 
         # 启动投票倒计时
@@ -459,7 +481,7 @@ class GameManager:
             if not room:
                 return
 
-            vote_time = room.config.vote_duration
+            vote_time = self._resolve_duration(room.config.vote_duration, "TEST_GAME_VOTE_DURATION")
 
             # 倒计时通知（每秒更新）
             for remaining in range(vote_time, 0, -1):
@@ -588,7 +610,8 @@ class GameManager:
         })
 
         # 等待配置中的揭晓时长后开始下一轮/结束游戏。
-        await asyncio.sleep(room.config.reveal_delay)
+        reveal_delay = self._resolve_duration(room.config.reveal_delay, "TEST_GAME_REVEAL_DELAY")
+        await asyncio.sleep(reveal_delay)
 
         # 判断是否结束游戏
         if game_round.round_number >= room.total_rounds:
@@ -657,6 +680,7 @@ class GameManager:
         await game_round.insert()
     
         # 通知所有玩家
+        question_duration = self._resolve_duration(room.config.question_duration, "TEST_GAME_QUESTION_DURATION")
         await sse_manager.publish(room_id, "new_round", {
             "round_id": str(game_round.id),
             "round_number": room.current_round,
@@ -664,7 +688,7 @@ class GameManager:
             "interrogator_nickname": interrogator.nickname,
             "subject_id": str(subject.id),
             "subject_nickname": subject.nickname,
-            "question_time": room.config.question_duration,
+            "question_time": question_duration,
         })
 
         # 启动提问倒计时

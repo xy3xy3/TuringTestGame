@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import string
 from datetime import datetime, timezone, timedelta
@@ -66,6 +67,15 @@ async def create_room(
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
     """
+    # 测试环境允许覆盖总回合数，避免 E2E 跑太久。
+    if os.getenv("APP_ENV", "").strip().lower() == "test":
+        raw_rounds = os.getenv("TEST_GAME_TOTAL_ROUNDS", "").strip()
+        if raw_rounds:
+            try:
+                total_rounds = int(raw_rounds)
+            except ValueError:
+                pass
+
     # 验证昵称长度
     if len(nickname) < 2:
         return {"success": False, "error": "昵称至少需要2个字符"}

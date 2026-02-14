@@ -26,6 +26,7 @@ class GamePlayer(Document):
     player_id: str = Field(default_factory=generate_player_id, max_length=32)
     room_id: str = Field(..., max_length=16)
     nickname: str = Field(..., min_length=2, max_length=32)
+    token: str = Field(..., min_length=1, max_length=128)
     system_prompt: str = Field(default="", max_length=2000)
     ai_model_id: str | None = Field(default=None, max_length=32)
     is_ready: bool = Field(default=False)
@@ -46,5 +47,6 @@ class GamePlayer(Document):
         name = "game_players"
         indexes = [
             IndexModel([("player_id", 1)], unique=True, name="uniq_player_id"),
+            IndexModel([("token", 1)], unique=True, name="uniq_player_token"),
             IndexModel([("room_id", 1)], name="idx_player_room"),
         ]

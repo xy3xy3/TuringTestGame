@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from typing import Any
 
@@ -79,6 +80,10 @@ async def call_ai(
                 logger.warning("没有找到任何启用的 AI 模型")
 
     if not model_config:
+        # 测试环境允许无模型时使用固定回复，避免 E2E 依赖外部 AI 服务。
+        if os.getenv("APP_ENV", "").strip().lower() == "test":
+            fake_reply = os.getenv("TEST_FAKE_AI_REPLY", "这是测试环境的固定 AI 回复").strip()
+            return {"success": True, "content": fake_reply or "这是测试环境的固定 AI 回复"}
         return {"success": False, "error": "没有可用的 AI 模型"}
 
     try:
@@ -143,6 +148,16 @@ async def calculate_display_delay(answer_type: str, submit_time_seconds: float) 
     Returns:
         延迟秒数
     """
+    # 测试环境可通过环境变量覆盖显示延迟，降低 E2E 等待时间。
+    if os.getenv("APP_ENV", "").strip().lower() == "test":
+        raw_delay = os.getenv("TEST_AI_DISPLAY_DELAY", "").strip()
+        if raw_delay:
+            try:
+                return max(0.0, float(raw_delay))
+            except ValueError:
+                pass
+        return 0.0
+
     base_delay = 0.0
 
     if answer_type == "ai":

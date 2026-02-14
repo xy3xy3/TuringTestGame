@@ -81,6 +81,14 @@ def e2e_base_url(test_mongo_url: str, e2e_mongo_db_name: str) -> Iterator[str]:
             "ADMIN_USER": os.getenv("TEST_ADMIN_USER", "e2e_admin"),
             "ADMIN_PASS": os.getenv("TEST_ADMIN_PASS", "e2e_pass_123"),
             "SECRET_KEY": os.getenv("TEST_SECRET_KEY", "test-secret-key"),
+            "TEST_FAKE_AI_REPLY": os.getenv("TEST_FAKE_AI_REPLY", "MOCK_AI_FIXED_REPLY"),
+            "TEST_AI_DISPLAY_DELAY": os.getenv("TEST_AI_DISPLAY_DELAY", "0"),
+            "TEST_GAME_SETUP_DURATION": os.getenv("TEST_GAME_SETUP_DURATION", "6"),
+            "TEST_GAME_QUESTION_DURATION": os.getenv("TEST_GAME_QUESTION_DURATION", "12"),
+            "TEST_GAME_ANSWER_DURATION": os.getenv("TEST_GAME_ANSWER_DURATION", "12"),
+            "TEST_GAME_VOTE_DURATION": os.getenv("TEST_GAME_VOTE_DURATION", "6"),
+            "TEST_GAME_REVEAL_DELAY": os.getenv("TEST_GAME_REVEAL_DELAY", "1"),
+            "TEST_GAME_TOTAL_ROUNDS": os.getenv("TEST_GAME_TOTAL_ROUNDS", "1"),
         }
     )
 
