@@ -108,6 +108,7 @@ async def game_index(request: Request) -> HTMLResponse:
             "request": request,
             "invite_room_code": room_code,
             "invite_password": password,
+            "bgm_stage": "waiting",
         },
     )
 
@@ -121,6 +122,7 @@ async def game_rooms_page(request: Request) -> HTMLResponse:
         {
             "request": request,
             "rooms": rooms,
+            "bgm_stage": "waiting",
         },
     )
 
@@ -222,6 +224,7 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
             "players": players,
             "current_player": current_player,
             "invite_link": invite_link,
+            "bgm_stage": "waiting",
         },
     )
 
@@ -234,6 +237,7 @@ async def result_page(request: Request, room_id: str) -> HTMLResponse:
         {
             "request": request,
             "room_id": room_id,
+            "bgm_stage": "finished",
         },
     )
 
@@ -294,6 +298,7 @@ async def play_page(request: Request, room_id: str) -> HTMLResponse:
             "player_id": str(player.id),
             "current_round": room.current_round,
             "players": players,
+            "bgm_stage": "playing_questioning",
         },
     )
 
@@ -325,6 +330,7 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
             "player": player,
             "ai_models": ai_models,
             "prompt_templates": prompt_templates,
+            "bgm_stage": "setup",
         },
     )
 

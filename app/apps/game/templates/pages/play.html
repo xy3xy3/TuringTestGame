@@ -213,6 +213,36 @@ let countdownInterval = null;
 // SSE 连接
 let eventSource = null;
 
+function mapPhaseToBgmStage(phase) {
+  const phaseKey = String(phase || '').trim().toLowerCase();
+  if (phaseKey === 'questioning') return 'playing_questioning';
+  if (phaseKey === 'answering') return 'playing_answering';
+  if (phaseKey === 'voting') return 'playing_voting';
+  return '';
+}
+
+function applyBgmForPhase(phase) {
+  const stage = mapPhaseToBgmStage(phase);
+  if (!stage || typeof window.setGameBgmStage !== 'function') return;
+  window.setGameBgmStage(stage);
+}
+
+function applyBgmForRoundResult(result) {
+  if (typeof window.setGameBgmStage !== 'function') return;
+  const interrogatorId = String(result?.interrogator_id || '');
+  const scores = result?.scores || {};
+  const delta = Number(scores[interrogatorId] || 0);
+  if (delta > 0) {
+    window.setGameBgmStage('playing_scored');
+    return;
+  }
+  if (delta < 0) {
+    window.setGameBgmStage('playing_penalty');
+    return;
+  }
+  window.setGameBgmStage('playing_skipped');
+}
+
 // 启动本地倒计时
 function startLocalCountdown(remaining, total) {
   // 如果本地倒计时已经在运行，且时间差小于2秒，不需要重新同步
@@ -382,6 +412,7 @@ function connectSSE() {
     updateScoreBoard(data.player_scores);
     renderRoundFeedback(data);
     updatePhaseDisplay('revealed');
+    applyBgmForRoundResult(data);
   });
 
   eventSource.addEventListener('game_over', (e) => {
@@ -409,6 +440,7 @@ function updatePhaseDisplay(phase) {
     'revealed': '结果揭晓'
   };
   document.getElementById('phase-display').textContent = phaseNames[phase] || phase;
+  applyBgmForPhase(phase);
 
   // 显示/隐藏操作区域
   document.getElementById('question-input-area').classList.add('hidden');

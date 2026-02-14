@@ -3,7 +3,7 @@
 {% block content %}
 <div class="space-y-4" x-data='{ "configTab": {{ active_config_tab | tojson }} }'>
   {% set config_perm = request.state.permission_flags.config %}
-  <form class="space-y-4" method="post" action="/admin/config">
+  <form class="space-y-4" method="post" action="/admin/config" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
     <input type="hidden" name="config_tab" x-model="configTab" />
 
@@ -53,6 +53,16 @@
       {% if saved %}
         <div class="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-600">
           配置已保存。
+        </div>
+      {% endif %}
+      {% if game_bgm_changes %}
+        <div class="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          背景音乐变更：{{ game_bgm_changes | join("，") }}
+        </div>
+      {% endif %}
+      {% if config_error %}
+        <div class="mt-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {{ config_error }}
         </div>
       {% endif %}
 
@@ -669,6 +679,57 @@
             {% if not config_perm['update'] %}readonly{% endif %}
           />
           <p class="text-xs text-slate-500 mt-1">回合结果揭晓前的等待时间（1-10秒）</p>
+        </div>
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">游戏阶段背景音乐（BGM）</h3>
+            <p class="text-xs text-slate-500 mt-1">支持按阶段上传音频，建议使用 mp3/ogg，单文件不超过 8MB。</p>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          {% for phase_key, phase_label in game_bgm_phase_labels.items() %}
+            {% set phase_url = game_bgm_config.get(phase_key, "") %}
+            <div class="rounded-lg border border-slate-200 bg-white p-3">
+              <div class="grid gap-3 md:grid-cols-12">
+                <div class="md:col-span-3">
+                  <p class="text-sm font-medium text-slate-900">{{ phase_label }}</p>
+                  <p class="text-xs text-slate-500 mt-1">阶段键：{{ phase_key }}</p>
+                </div>
+                <div class="md:col-span-6">
+                  <label class="label">上传音乐文件</label>
+                  <input
+                    type="file"
+                    name="bgm_{{ phase_key }}_file"
+                    accept="audio/*,.mp3,.ogg,.wav,.m4a"
+                    class="input h-auto py-2"
+                    {% if not config_perm['update'] %}disabled{% endif %}
+                  />
+                  {% if phase_url %}
+                    <p class="mt-2 break-all text-xs text-slate-500">当前：{{ phase_url }}</p>
+                    <audio class="mt-2 w-full" controls preload="none" src="{{ phase_url }}"></audio>
+                  {% else %}
+                    <p class="mt-2 text-xs text-slate-400">当前未配置</p>
+                  {% endif %}
+                </div>
+                <div class="md:col-span-3">
+                  <label class="label">清空当前音乐</label>
+                  <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      name="bgm_{{ phase_key }}_clear"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      {% if not config_perm['update'] %}disabled{% endif %}
+                    />
+                    <span>勾选后保存时删除</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
         </div>
       </div>
 

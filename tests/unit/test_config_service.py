@@ -256,6 +256,85 @@ async def test_save_game_time_config_clamps_to_latest_ranges(monkeypatch) -> Non
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_game_bgm_config_normalizes_values(monkeypatch) -> None:
+    """读取游戏阶段背景音乐时应清洗为合法静态地址。"""
+
+    raw = {
+        "waiting": "/static/uploads/game_bgm/wait.mp3",
+        "setup": "https://example.com/evil.mp3",
+        "playing_questioning": "/static/uploads/game_bgm/q.ogg",
+        "playing_answering": "/static/uploads/game_bgm/a.wav",
+        "playing_voting": "/static/uploads/game_bgm/v.mp3",
+        "playing_scored": "",
+        "playing_skipped": "/static/uploads/game_bgm/s.mp3",
+        "playing_penalty": "/static/uploads/game_bgm/p.mp3",
+        "finished": "/static/uploads/game_bgm/f.m4a",
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        if key in raw:
+            return SimpleNamespace(value=raw[key])
+        return None
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.get_game_bgm_config()
+
+    assert config["waiting"] == "/static/uploads/game_bgm/wait.mp3"
+    assert config["setup"] == ""
+    assert config["playing_voting"] == "/static/uploads/game_bgm/v.mp3"
+    assert config["finished"] == "/static/uploads/game_bgm/f.m4a"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_save_game_bgm_config_updates_existing_items(monkeypatch) -> None:
+    """保存游戏阶段背景音乐时应更新已有配置项并完成地址清洗。"""
+
+    class FakeConfigItem:
+        def __init__(self, value: str) -> None:
+            self.value = value
+            self.name = ""
+            self.description = ""
+            self.updated_at = None
+            self.saved = False
+
+        async def save(self) -> None:
+            self.saved = True
+
+    items = {
+        key: FakeConfigItem("")
+        for key in config_service.GAME_BGM_PHASE_KEYS
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        return items.get(key)
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    payload = {
+        "waiting": "/static/uploads/game_bgm/new_wait.mp3",
+        "setup": "/static/uploads/game_bgm/new_setup.mp3",
+        "playing_questioning": "/static/uploads/game_bgm/new_q.mp3",
+        "playing_answering": "/static/uploads/game_bgm/new_a.mp3",
+        "playing_voting": "/static/uploads/game_bgm/new_v.mp3",
+        "playing_scored": "/static/uploads/game_bgm/new_scored.mp3",
+        "playing_skipped": "/static/uploads/game_bgm/new_skipped.mp3",
+        "playing_penalty": "/static/uploads/game_bgm/new_penalty.mp3",
+        "finished": "https://example.com/invalid.mp3",
+    }
+    config = await config_service.save_game_bgm_config(payload)
+
+    assert config["waiting"] == "/static/uploads/game_bgm/new_wait.mp3"
+    assert config["playing_voting"] == "/static/uploads/game_bgm/new_v.mp3"
+    assert config["finished"] == ""
+    assert items["playing_voting"].value == "/static/uploads/game_bgm/new_v.mp3"
+    assert items["finished"].value == ""
+    assert all(item.saved for item in items.values())
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_game_role_balance_config_returns_default_when_missing(monkeypatch) -> None:
     """未配置角色保底参数时应返回默认值。"""
 

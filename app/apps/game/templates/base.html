@@ -8,6 +8,12 @@
   <title>{% block title %}图灵测试游戏{% endblock %}</title>
   <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css" />
   <link rel="stylesheet" href="/static/css/app.css" />
+  <script>
+    window.__ttgBgmQueue = [];
+    window.setGameBgmStage = function(stage, options) {
+      window.__ttgBgmQueue.push({ stage, options: options || {} });
+    };
+  </script>
   <style>
     .input {
       @apply w-full rounded-lg border border-slate-600 bg-slate-800/50 px-4 py-2 text-white placeholder-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20;
@@ -23,6 +29,17 @@
 
 <body class="antialiased min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
   {% block content %}{% endblock %}
+
+  <audio id="game-bgm-player" preload="none" loop class="hidden"></audio>
+  <button
+    id="bgm-toggle-btn"
+    type="button"
+    class="fixed right-4 top-4 z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
+    aria-label="切换背景音乐"
+  >
+    <i class="fa-solid fa-volume-xmark"></i>
+    <span>音乐关闭</span>
+  </button>
 
   {% set footer_text = request.state.footer_copyright_text | default("TuringTestGame", true) %}
   {% set footer_url = request.state.footer_copyright_url | default("https://github.com/xy3xy3/TuringTestGame", true) %}
@@ -66,6 +83,98 @@
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.js" defer></script>
   <script src="/static/js/app.js" defer></script>
+  <script>
+    (() => {
+      const tracks = {{ request.state.game_bgm_config | default({}, true) | tojson }};
+      const initialStage = {{ bgm_stage | default("", true) | tojson }};
+      const audioEl = document.getElementById("game-bgm-player");
+      const toggleBtn = document.getElementById("bgm-toggle-btn");
+      if (!audioEl || !toggleBtn) return;
+
+      const iconEl = toggleBtn.querySelector("i");
+      const textEl = toggleBtn.querySelector("span");
+      let enabled = window.localStorage.getItem("ttg_bgm_enabled") !== "0";
+      let currentStage = "";
+      let pendingUserGesture = false;
+
+      const updateToggleUi = () => {
+        if (iconEl) {
+          iconEl.className = enabled ? "fa-solid fa-volume-high" : "fa-solid fa-volume-xmark";
+        }
+        if (textEl) {
+          textEl.textContent = enabled ? "音乐开启" : "音乐关闭";
+        }
+      };
+
+      const tryPlayCurrent = () => {
+        if (!enabled || !audioEl.src) return;
+        const playPromise = audioEl.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            // 自动播放受限时等待用户手势再次触发播放。
+            pendingUserGesture = true;
+          });
+        }
+      };
+
+      const applyStage = (stage) => {
+        const nextStage = String(stage || "").trim();
+        const nextSrc = nextStage ? String(tracks[nextStage] || "").trim() : "";
+        currentStage = nextStage;
+        if (!nextSrc) {
+          audioEl.pause();
+          audioEl.removeAttribute("src");
+          audioEl.load();
+          return;
+        }
+        if (audioEl.getAttribute("src") !== nextSrc) {
+          audioEl.setAttribute("src", nextSrc);
+          audioEl.load();
+        }
+        tryPlayCurrent();
+      };
+
+      window.setGameBgmStage = (stage) => {
+        applyStage(stage);
+      };
+
+      toggleBtn.addEventListener("click", () => {
+        enabled = !enabled;
+        window.localStorage.setItem("ttg_bgm_enabled", enabled ? "1" : "0");
+        updateToggleUi();
+        if (!enabled) {
+          audioEl.pause();
+          return;
+        }
+        pendingUserGesture = false;
+        tryPlayCurrent();
+      });
+
+      const onUserGesture = () => {
+        if (!pendingUserGesture || !enabled) return;
+        pendingUserGesture = false;
+        tryPlayCurrent();
+      };
+      window.addEventListener("pointerdown", onUserGesture, { passive: true });
+      window.addEventListener("keydown", onUserGesture, { passive: true });
+
+      updateToggleUi();
+
+      // 先处理页面设置的默认阶段。
+      if (initialStage) {
+        applyStage(initialStage);
+      }
+
+      // 再处理内容区脚本在加载早期推入的阶段切换请求。
+      const queued = Array.isArray(window.__ttgBgmQueue) ? window.__ttgBgmQueue : [];
+      while (queued.length) {
+        const item = queued.shift();
+        if (item && item.stage !== undefined) {
+          applyStage(item.stage);
+        }
+      }
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 

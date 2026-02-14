@@ -365,6 +365,81 @@ async def save_game_time_config(config: dict[str, int]) -> dict[str, int]:
     return await get_game_time_config()
 
 
+# 游戏背景音乐配置（按阶段）
+GAME_BGM_CONFIG_GROUP = "game_bgm"
+GAME_BGM_PHASE_KEYS: dict[str, str] = {
+    "waiting": "房间大厅",
+    "setup": "灵魂注入",
+    "playing_questioning": "对局-提问阶段",
+    "playing_answering": "对局-回答阶段",
+    "playing_voting": "对局-投票阶段",
+    "playing_scored": "对局-回答得分",
+    "playing_skipped": "对局-跳过",
+    "playing_penalty": "对局-回答失分",
+    "finished": "结算页面",
+}
+GAME_BGM_META: dict[str, tuple[str, str]] = {
+    "waiting": ("大厅背景音乐", "游戏房间等待阶段背景音乐"),
+    "setup": ("灵魂注入背景音乐", "灵魂注入阶段背景音乐"),
+    "playing_questioning": ("提问阶段背景音乐", "对局内提问阶段背景音乐"),
+    "playing_answering": ("回答阶段背景音乐", "对局内回答阶段背景音乐"),
+    "playing_voting": ("投票阶段背景音乐", "对局内投票阶段背景音乐"),
+    "playing_scored": ("回答得分背景音乐", "对局内回答得分结果背景音乐"),
+    "playing_skipped": ("跳过结果背景音乐", "对局内跳过结果背景音乐"),
+    "playing_penalty": ("回答失分背景音乐", "对局内回答失分结果背景音乐"),
+    "finished": ("结算背景音乐", "游戏结算阶段背景音乐"),
+}
+
+
+def _normalize_game_bgm_url(value: object) -> str:
+    """规范化阶段背景音乐 URL，仅允许静态目录地址。"""
+
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("/static/uploads/game_bgm/"):
+        return raw
+    return ""
+
+
+async def get_game_bgm_config() -> dict[str, str]:
+    """获取游戏阶段背景音乐配置。"""
+
+    config: dict[str, str] = {}
+    for key in GAME_BGM_PHASE_KEYS:
+        item = await find_config_item(GAME_BGM_CONFIG_GROUP, key)
+        config[key] = _normalize_game_bgm_url(item.value if item else "")
+    return config
+
+
+async def save_game_bgm_config(payload: dict[str, object]) -> dict[str, str]:
+    """保存游戏阶段背景音乐配置。"""
+
+    normalized = {
+        key: _normalize_game_bgm_url(payload.get(key))
+        for key in GAME_BGM_PHASE_KEYS
+    }
+    for key, value in normalized.items():
+        name, description = GAME_BGM_META[key]
+        item = await find_config_item(GAME_BGM_CONFIG_GROUP, key)
+        if item:
+            item.value = value
+            item.name = name
+            item.description = description
+            item.updated_at = utc_now()
+            await item.save()
+        else:
+            await ConfigItem(
+                key=key,
+                name=name,
+                value=value,
+                group=GAME_BGM_CONFIG_GROUP,
+                description=description,
+                updated_at=utc_now(),
+            ).insert()
+    return normalized
+
+
 # 游戏角色伪随机保底配置（提问者/被测者选角）
 GAME_ROLE_BALANCE_CONFIG_GROUP = "game_role_balance"
 GAME_ROLE_BALANCE_CONFIG_KEYS = {

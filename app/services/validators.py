@@ -7,6 +7,8 @@ import re
 ROLE_SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 ADMIN_USERNAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{2,31}$")
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+AUDIO_EXTENSIONS = {".mp3", ".ogg", ".wav", ".m4a"}
+AUDIO_CONTENT_TYPE_PREFIX = "audio/"
 
 
 def normalize_role_slug(value: str) -> str:
@@ -59,3 +61,26 @@ def validate_optional_email(value: str) -> str:
     if EMAIL_PATTERN.fullmatch(email):
         return ""
     return "邮箱格式不合法"
+
+
+def normalize_audio_extension(filename: str) -> str:
+    """提取并规范化音频文件后缀名。"""
+
+    name = str(filename or "").strip().lower()
+    if "." not in name:
+        return ""
+    return f".{name.rsplit('.', 1)[-1]}"
+
+
+def validate_audio_file_meta(filename: str, content_type: str | None = None) -> str:
+    """校验音频文件元信息（后缀与 MIME）。"""
+
+    suffix = normalize_audio_extension(filename)
+    if suffix not in AUDIO_EXTENSIONS:
+        allowed = " / ".join(sorted(AUDIO_EXTENSIONS))
+        return f"仅支持 {allowed} 格式"
+
+    mime = str(content_type or "").strip().lower()
+    if mime and not mime.startswith(AUDIO_CONTENT_TYPE_PREFIX):
+        return "文件类型必须为音频"
+    return ""

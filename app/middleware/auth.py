@@ -48,7 +48,7 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
         self.exempt_paths = exempt_paths or set()
 
     async def _inject_footer_config(self, request: Request) -> None:
-        """为 HTML 请求注入底部版权配置，供模板统一展示。"""
+        """为 HTML 请求注入页脚与游戏背景音乐配置。"""
         accept = str(request.headers.get("accept", "")).lower()
         if "text/html" not in accept:
             return
@@ -61,6 +61,12 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
             # 配置读取失败时回退默认值，避免影响页面访问。
             request.state.footer_copyright_text = config_service.FOOTER_COPYRIGHT_TEXT_DEFAULT
             request.state.footer_copyright_url = config_service.FOOTER_COPYRIGHT_URL_DEFAULT
+
+        try:
+            request.state.game_bgm_config = await config_service.get_game_bgm_config()
+        except Exception:
+            # 背景音乐读取失败时回退空配置，避免影响页面访问。
+            request.state.game_bgm_config = {}
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
