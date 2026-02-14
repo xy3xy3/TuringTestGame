@@ -32,6 +32,9 @@ def get_request_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     if forwarded:
         return forwarded
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip:
+        return real_ip
     if request.client and request.client.host:
         return request.client.host
     return ""

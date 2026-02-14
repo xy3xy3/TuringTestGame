@@ -14,6 +14,8 @@ from app.services import (
     log_service,
     permission_decorator,
     permission_service,
+    rate_limit_service,
+    redis_service,
     role_service,
     validators,
 )
@@ -36,6 +38,8 @@ __all__ = [
     "log_service",
     "permission_decorator",
     "permission_service",
+    "rate_limit_service",
+    "redis_service",
     "role_service",
     "sse_manager",
     "validators",

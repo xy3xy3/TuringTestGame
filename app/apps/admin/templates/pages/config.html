@@ -97,6 +97,104 @@
           />
           <p class="text-xs text-slate-500 mt-1">底部版权点击后跳转地址，默认推广仓库链接。</p>
         </div>
+
+        <div class="md:col-span-12">
+          <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">IP 限流（防 CC）</h3>
+                <p class="mt-1 text-xs text-slate-500">
+                  支持按 IP 对游戏写接口限流；若部署在 Nginx 反向代理后，可启用“信任代理 IP 头”读取
+                  <code>X-Forwarded-For</code> / <code>X-Real-IP</code>。
+                </p>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-4 md:grid-cols-12">
+              <div class="md:col-span-6">
+                <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="rate_limit_enabled"
+                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    {% if rate_limit_config.enabled %}checked{% endif %}
+                    {% if not config_perm['update'] %}disabled{% endif %}
+                  />
+                  <span>启用 IP 限流</span>
+                </label>
+              </div>
+              <div class="md:col-span-6">
+                <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="rate_limit_trust_proxy_headers"
+                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    {% if rate_limit_config.trust_proxy_headers %}checked{% endif %}
+                    {% if not config_perm['update'] %}disabled{% endif %}
+                  />
+                  <span>信任代理 IP 头（Nginx）</span>
+                </label>
+              </div>
+
+              <div class="md:col-span-4">
+                <label class="label">限流窗口（秒）</label>
+                <input
+                  type="number"
+                  min="1"
+                  name="rate_limit_window_seconds"
+                  class="input"
+                  value="{{ rate_limit_config.window_seconds }}"
+                  {% if not config_perm['update'] %}readonly{% endif %}
+                />
+              </div>
+              <div class="md:col-span-4">
+                <label class="label">通用写接口上限</label>
+                <input
+                  type="number"
+                  min="1"
+                  name="rate_limit_max_requests"
+                  class="input"
+                  value="{{ rate_limit_config.max_requests }}"
+                  {% if not config_perm['update'] %}readonly{% endif %}
+                />
+              </div>
+              <div class="md:col-span-4">
+                <label class="label">测试对话接口上限</label>
+                <input
+                  type="number"
+                  min="1"
+                  name="rate_limit_chat_api_max_requests"
+                  class="input"
+                  value="{{ rate_limit_config.chat_api_max_requests }}"
+                  {% if not config_perm['update'] %}readonly{% endif %}
+                />
+              </div>
+
+              <div class="md:col-span-6">
+                <label class="label">创建房间上限</label>
+                <input
+                  type="number"
+                  min="1"
+                  name="rate_limit_create_room_max_requests"
+                  class="input"
+                  value="{{ rate_limit_config.create_room_max_requests }}"
+                  {% if not config_perm['update'] %}readonly{% endif %}
+                />
+              </div>
+              <div class="md:col-span-6">
+                <label class="label">加入房间上限</label>
+                <input
+                  type="number"
+                  min="1"
+                  name="rate_limit_join_room_max_requests"
+                  class="input"
+                  value="{{ rate_limit_config.join_room_max_requests }}"
+                  {% if not config_perm['update'] %}readonly{% endif %}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="md:col-span-8">
           <label class="label">SMTP 主机</label>
           <input name="smtp_host" class="input" value="{{ smtp.smtp_host }}" {% if not config_perm['update'] %}readonly{% endif %} />

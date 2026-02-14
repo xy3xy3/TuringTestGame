@@ -21,9 +21,11 @@ from .apps.game.controllers.game import router as game_router
 from .config import APP_NAME, SECRET_KEY
 from .db import close_db, init_db
 from .middleware.auth import AdminAuthMiddleware
+from .middleware.rate_limit import GameRateLimitMiddleware
 from .services.auth_service import ensure_default_admin
 from .services.backup_scheduler import start_scheduler, stop_scheduler
 from .services.cleanup_service import start_cleanup_scheduler, stop_cleanup_scheduler
+from .services.redis_service import close_redis_client
 from .services.role_service import ensure_default_roles
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,6 +39,7 @@ logging.basicConfig(
 
 app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.add_middleware(GameRateLimitMiddleware)
 app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout", "/game", "/game/create", "/game/join", "/game/api"})
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa_session")
 app.include_router(game_router)
@@ -70,4 +73,5 @@ async def on_shutdown() -> None:
     """应用停止时关闭备份调度器与数据库连接。"""
     stop_scheduler()
     stop_cleanup_scheduler()
+    await close_redis_client()
     await close_db()

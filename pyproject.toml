@@ -22,6 +22,7 @@ dependencies = [
   "cos-python-sdk-v5>=1.9.41",
   "aiohttp>=3.13.3",
   "openai>=2.20.0",
+  "redis>=6.2.0",
 ]
 
 [project.urls]

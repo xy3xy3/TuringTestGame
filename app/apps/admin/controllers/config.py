@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.services import backup_service, config_service, log_service, permission_decorator, cleanup_service
+from app.services import rate_limit_service
 from app.services.backup_scheduler import restart_scheduler
 from app.services.cleanup_service import restart_cleanup_scheduler
 
@@ -83,6 +84,7 @@ async def config_page(request: Request) -> HTMLResponse:
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
     footer_copyright = await config_service.get_footer_copyright()
+    rate_limit_config = await config_service.get_rate_limit_config()
     cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
     active_config_tab = _normalize_config_tab(request.query_params.get("tab"))
@@ -99,6 +101,7 @@ async def config_page(request: Request) -> HTMLResponse:
         "active_config_tab": active_config_tab,
         "base_url": base_url,
         "footer_copyright": footer_copyright,
+        "rate_limit_config": rate_limit_config,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
     }
@@ -144,12 +147,23 @@ async def config_save(
         if isinstance(value, str)
     ]
     backup_payload = _build_backup_payload(form_data)
+    rate_limit_payload = {
+        "enabled": form_data.get("rate_limit_enabled") == "on",
+        "trust_proxy_headers": form_data.get("rate_limit_trust_proxy_headers") == "on",
+        "window_seconds": form_data.get("rate_limit_window_seconds", "60"),
+        "max_requests": form_data.get("rate_limit_max_requests", "120"),
+        "create_room_max_requests": form_data.get("rate_limit_create_room_max_requests", "20"),
+        "join_room_max_requests": form_data.get("rate_limit_join_room_max_requests", "40"),
+        "chat_api_max_requests": form_data.get("rate_limit_chat_api_max_requests", "30"),
+    }
 
     await config_service.save_smtp_config(smtp_payload)
     audit_actions = await config_service.save_audit_log_actions(selected_actions)
     await backup_service.save_backup_config(backup_payload)
     await config_service.save_base_url(base_url)
     await config_service.save_footer_copyright(footer_copyright_text, footer_copyright_url)
+    await config_service.save_rate_limit_config(rate_limit_payload)
+    rate_limit_service.invalidate_config_cache()
 
     # 保存清理配置
     cleanup_enabled = form_data.get("cleanup_enabled") == "on"
@@ -179,6 +193,7 @@ async def config_save(
     collections = await backup_service.get_collection_names()
     base_url = await config_service.get_base_url()
     footer_copyright = await config_service.get_footer_copyright()
+    rate_limit_config = await config_service.get_rate_limit_config()
     cleanup_config = await config_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
     context = {
@@ -193,6 +208,7 @@ async def config_save(
         "active_config_tab": active_config_tab,
         "base_url": base_url,
         "footer_copyright": footer_copyright,
+        "rate_limit_config": rate_limit_config,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
     }

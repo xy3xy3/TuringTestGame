@@ -19,6 +19,7 @@
 - 创建/加入房间（邀请码邀请）
 - 灵魂注入：为你的 AI 角色设置系统提示词与模型
 - SSE 实时同步房间与对局状态（准备状态、回合推进、倒计时等）
+- 支持 Redis + IP 限流（可在后台系统配置开启，防止恶意高频请求）
 
 ## 游戏规则（图灵测试）
 
@@ -55,7 +56,7 @@
 - Node + pnpm
 - Python 3.13 + uv
 
-1) 启动 MongoDB（开发环境）
+1) 启动 MongoDB + Redis（开发环境）
 
 ```bash
 cd deploy/dev
@@ -88,6 +89,25 @@ uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 - 管理后台：`http://localhost:8000/admin/login`
 
 首次启动会自动创建默认管理员（用户名/密码来自 `.env` 的 `ADMIN_USER`、`ADMIN_PASS`）。
+
+## IP 限流与反向代理 IP
+
+你可以在后台 `系统配置 -> 系统设置 -> IP 限流（防 CC）` 中配置：
+- 是否启用限流
+- 限流窗口秒数
+- 创建房间 / 加入房间 / 测试对话 / 通用写接口的请求上限
+- 是否信任反向代理 IP 头（`X-Forwarded-For` / `X-Real-IP`）
+
+建议 Nginx 反代配置（示例）：
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Real-IP $remote_addr;
+```
+
+部署时请确保 `.env` 中配置了 Redis：
+- `REDIS_URL=redis://localhost:6379/0`（本地）
+- 生产 compose 默认注入：`redis://redis:6379/0`
 
 ## AI 模型配置（用于“AI 代答”）
 
@@ -142,6 +162,7 @@ docker compose --env-file ../../.env up -d --build
 
 部署要点
 - 正确配置 `MONGO_URL/MONGO_DB/SECRET_KEY`
+- 正确配置 `REDIS_URL`（用于 IP 限流）
 - 配置后台 AI 模型（否则“AI 代答”不可用）
 - 邀请链接依赖站点 `Base URL`（后台配置项，用于生成可分享链接）
 

@@ -214,6 +214,106 @@ async def save_footer_copyright(text: str, url: str) -> dict[str, str]:
     }
 
 
+# 游戏 IP 限流配置
+RATE_LIMIT_CONFIG_GROUP = "rate_limit"
+RATE_LIMIT_DEFAULT_CONFIG: dict[str, int | bool] = {
+    "enabled": False,
+    "trust_proxy_headers": False,
+    "window_seconds": 60,
+    "max_requests": 120,
+    "create_room_max_requests": 20,
+    "join_room_max_requests": 40,
+    "chat_api_max_requests": 30,
+}
+RATE_LIMIT_INT_RANGES: dict[str, tuple[int, int]] = {
+    "window_seconds": (1, 3600),
+    "max_requests": (1, 100000),
+    "create_room_max_requests": (1, 100000),
+    "join_room_max_requests": (1, 100000),
+    "chat_api_max_requests": (1, 100000),
+}
+RATE_LIMIT_META: dict[str, tuple[str, str]] = {
+    "enabled": ("启用 IP 限流", "用于防止恶意高频请求（CC）"),
+    "trust_proxy_headers": ("信任代理 IP 头", "启用后会使用 X-Forwarded-For / X-Real-IP 识别真实来源 IP"),
+    "window_seconds": ("限流窗口（秒）", "固定窗口长度，单位秒"),
+    "max_requests": ("通用写接口上限", "除创建/加入/测试对话外，其他游戏写接口的窗口请求上限"),
+    "create_room_max_requests": ("创建房间上限", "创建房间接口在限流窗口内的请求上限"),
+    "join_room_max_requests": ("加入房间上限", "加入房间接口在限流窗口内的请求上限"),
+    "chat_api_max_requests": ("测试对话上限", "灵魂注入测试对话接口在限流窗口内的请求上限"),
+}
+
+
+def _to_bool(value: object, *, default: bool) -> bool:
+    """将任意输入转换为布尔值。"""
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "on", "yes", "y"}:
+        return True
+    if text in {"0", "false", "off", "no", "n"}:
+        return False
+    return default
+
+
+def _to_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    """将任意输入转换为整数并裁剪到区间内。"""
+    try:
+        parsed = int(str(value).strip())
+    except Exception:
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def _normalize_rate_limit_config(payload: dict[str, object]) -> dict[str, int | bool]:
+    """规范化限流配置。"""
+    normalized: dict[str, int | bool] = {
+        "enabled": _to_bool(payload.get("enabled"), default=bool(RATE_LIMIT_DEFAULT_CONFIG["enabled"])),
+        "trust_proxy_headers": _to_bool(
+            payload.get("trust_proxy_headers"),
+            default=bool(RATE_LIMIT_DEFAULT_CONFIG["trust_proxy_headers"]),
+        ),
+    }
+    for key, (minimum, maximum) in RATE_LIMIT_INT_RANGES.items():
+        default = int(RATE_LIMIT_DEFAULT_CONFIG[key])
+        normalized[key] = _to_int(payload.get(key), default=default, minimum=minimum, maximum=maximum)
+    return normalized
+
+
+async def get_rate_limit_config() -> dict[str, int | bool]:
+    """读取游戏 IP 限流配置。"""
+    payload: dict[str, object] = {}
+    for key in RATE_LIMIT_DEFAULT_CONFIG:
+        item = await find_config_item(RATE_LIMIT_CONFIG_GROUP, key)
+        if item:
+            payload[key] = item.value
+    return _normalize_rate_limit_config(payload)
+
+
+async def save_rate_limit_config(payload: dict[str, object]) -> dict[str, int | bool]:
+    """保存游戏 IP 限流配置。"""
+    normalized = _normalize_rate_limit_config(payload)
+    for key, value in normalized.items():
+        name, description = RATE_LIMIT_META[key]
+        stored = "true" if isinstance(value, bool) else str(value)
+        item = await find_config_item(RATE_LIMIT_CONFIG_GROUP, key)
+        if item:
+            item.value = stored
+            item.name = name
+            item.description = description
+            item.updated_at = utc_now()
+            await item.save()
+        else:
+            await ConfigItem(
+                key=key,
+                name=name,
+                value=stored,
+                group=RATE_LIMIT_CONFIG_GROUP,
+                description=description,
+                updated_at=utc_now(),
+            ).insert()
+    return normalized
+
+
 # 游戏时间配置（各阶段时长）
 GAME_TIME_CONFIG_KEYS = {
     "setup_duration": ("灵魂注入时长", 60, 30, 300),

@@ -8,6 +8,15 @@ services:
     volumes:
       - mongo_data:/data/db
 
+  redis:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/redis:8.2.2-bookworm
+    container_name: TuringTestGame-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+
   app:
     build:
       context: ../..
@@ -17,6 +26,7 @@ services:
     environment:
       APP_PORT: ${APP_PORT:-8000}
       MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379/0
       MONGO_DB: ${MONGO_DB:-TuringTestGame}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       ADMIN_USER: ${ADMIN_USER:-admin}
@@ -25,6 +35,8 @@ services:
       - "${APP_PORT:-8000}:8000"
     depends_on:
       - mongo
+      - redis
 
 volumes:
   mongo_data:
+  redis_data:

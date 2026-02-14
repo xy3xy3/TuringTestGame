@@ -16,6 +16,7 @@ APP_ENV = os.getenv("APP_ENV", "dev")
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 MONGO_DB = os.getenv("MONGO_DB", "TuringTestGame")
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
