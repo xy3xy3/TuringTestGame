@@ -15,6 +15,51 @@ CSRF_HEADER_NAME = "x-csrf-token"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
 
+def _extract_multipart_boundary(content_type: str) -> str:
+    """从 Content-Type 中提取 multipart boundary。"""
+
+    for segment in str(content_type or "").split(";")[1:]:
+        key, _, value = segment.strip().partition("=")
+        if key.strip().lower() != "boundary":
+            continue
+        return value.strip().strip('"')
+    return ""
+
+
+def _extract_multipart_token(body: bytes, content_type: str) -> str:
+    """从 multipart 请求体中提取 CSRF 字段值。"""
+
+    boundary = _extract_multipart_boundary(content_type)
+    if not boundary or not body:
+        return ""
+
+    boundary_bytes = f"--{boundary}".encode("utf-8")
+    for raw_part in body.split(boundary_bytes):
+        part = raw_part.strip(b"\r\n")
+        if not part or part == b"--":
+            continue
+        if part.endswith(b"--"):
+            part = part[:-2].rstrip(b"\r\n")
+
+        headers, marker, value_blob = part.partition(b"\r\n\r\n")
+        if not marker:
+            continue
+
+        header_text = headers.decode("latin-1", errors="ignore").lower()
+        if "content-disposition:" not in header_text:
+            continue
+        if f'name="{CSRF_FORM_FIELD}"' not in header_text:
+            continue
+        # 仅接受普通字段，避免命中文件 part。
+        if "filename=" in header_text:
+            continue
+
+        value = value_blob.rstrip(b"\r\n")
+        return value.decode("utf-8", errors="ignore").strip()
+
+    return ""
+
+
 def ensure_csrf_token(session: MutableMapping[str, Any]) -> str:
     """确保会话中存在 CSRF Token，并返回该值。"""
 
@@ -48,14 +93,16 @@ async def extract_submitted_token(request: Request) -> str:
     if header_token:
         return header_token
 
-    content_type = (request.headers.get("content-type") or "").lower()
+    content_type_raw = request.headers.get("content-type") or ""
+    content_type = content_type_raw.lower()
     if "multipart/form-data" in content_type:
+        # 在 BaseHTTPMiddleware 中提前调用 request.form() 会导致下游拿不到 UploadFile，
+        # multipart 场景改为直接读取 body 解析 token，避免文件上传字段丢失。
         try:
-            form = await request.form()
+            body = await request.body()
         except Exception:
             return ""
-        value = form.get(CSRF_FORM_FIELD)
-        return str(value).strip() if value else ""
+        return _extract_multipart_token(body, content_type_raw)
 
     if "application/x-www-form-urlencoded" in content_type:
         # body() 会缓存请求体，后续 FastAPI 依然能继续读取 Form 参数。

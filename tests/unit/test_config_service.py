@@ -261,13 +261,13 @@ async def test_get_game_bgm_config_normalizes_values(monkeypatch) -> None:
 
     raw = {
         "waiting": "/static/uploads/game_bgm/wait.mp3",
-        "setup": "https://example.com/evil.mp3",
-        "playing_questioning": "/static/uploads/game_bgm/q.ogg",
+        "setup": "static/uploads/game_bgm/setup.ogg",
+        "playing_questioning": "http://127.0.0.1:8000/static/uploads/game_bgm/q.ogg",
         "playing_answering": "/static/uploads/game_bgm/a.wav",
         "playing_voting": "/static/uploads/game_bgm/v.mp3",
-        "playing_scored": "",
+        "playing_scored": "https://example.com/evil.mp3",
         "playing_skipped": "/static/uploads/game_bgm/s.mp3",
-        "playing_penalty": "/static/uploads/game_bgm/p.mp3",
+        "playing_penalty": "p.mp3",
         "finished": "/static/uploads/game_bgm/f.m4a",
     }
 
@@ -281,8 +281,11 @@ async def test_get_game_bgm_config_normalizes_values(monkeypatch) -> None:
     config = await config_service.get_game_bgm_config()
 
     assert config["waiting"] == "/static/uploads/game_bgm/wait.mp3"
-    assert config["setup"] == ""
+    assert config["setup"] == "/static/uploads/game_bgm/setup.ogg"
+    assert config["playing_questioning"] == "/static/uploads/game_bgm/q.ogg"
     assert config["playing_voting"] == "/static/uploads/game_bgm/v.mp3"
+    assert config["playing_scored"] == ""
+    assert config["playing_penalty"] == "/static/uploads/game_bgm/p.mp3"
     assert config["finished"] == "/static/uploads/game_bgm/f.m4a"
 
 

@@ -45,3 +45,5 @@ backups/
 !backups/.gitkeep
 
 local/
+
+app/static/uploads

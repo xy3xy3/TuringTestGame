@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from urllib.parse import unquote, urlparse
 
 from app.models import ConfigItem
 from app.models.config_item import utc_now
@@ -389,17 +390,37 @@ GAME_BGM_META: dict[str, tuple[str, str]] = {
     "playing_penalty": ("回答失分背景音乐", "对局内回答失分结果背景音乐"),
     "finished": ("结算背景音乐", "游戏结算阶段背景音乐"),
 }
+BGM_STATIC_PREFIX = "/static/uploads/game_bgm/"
+
+
+def _normalize_game_bgm_path(path_value: object) -> str:
+    """规范化背景音乐静态路径，兼容历史存储格式。"""
+
+    raw = str(path_value or "").strip()
+    if not raw:
+        return ""
+
+    parsed = urlparse(raw)
+    path = unquote(str(parsed.path or "").strip()) or raw
+    if path.startswith("static/uploads/game_bgm/"):
+        path = "/" + path
+
+    if path.startswith(BGM_STATIC_PREFIX):
+        filename = path.removeprefix(BGM_STATIC_PREFIX)
+    elif "/" not in path and "\\" not in path and path not in {".", ".."}:
+        filename = path
+    else:
+        return ""
+
+    if not filename or "/" in filename or "\\" in filename or filename in {".", ".."}:
+        return ""
+    return f"{BGM_STATIC_PREFIX}{filename}"
 
 
 def _normalize_game_bgm_url(value: object) -> str:
     """规范化阶段背景音乐 URL，仅允许静态目录地址。"""
 
-    raw = str(value or "").strip()
-    if not raw:
-        return ""
-    if raw.startswith("/static/uploads/game_bgm/"):
-        return raw
-    return ""
+    return _normalize_game_bgm_path(value)
 
 
 async def get_game_bgm_config() -> dict[str, str]:

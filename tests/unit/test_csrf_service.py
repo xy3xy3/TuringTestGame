@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.services import csrf_service
 
@@ -72,3 +75,38 @@ async def test_extract_submitted_token_from_multipart() -> None:
     token = await csrf_service.extract_submitted_token(request)
 
     assert token == "token123"
+
+
+@pytest.mark.unit
+def test_extract_submitted_token_keeps_multipart_file_for_endpoint() -> None:
+    """中间件提取 multipart CSRF 后，下游仍应能读取 UploadFile。"""
+
+    app = FastAPI()
+
+    class CsrfProbeMiddleware(BaseHTTPMiddleware):
+        """模拟鉴权中间件提前执行 CSRF 提取。"""
+
+        async def dispatch(self, request: Request, call_next):
+            request.state.probed_csrf = await csrf_service.extract_submitted_token(request)
+            return await call_next(request)
+
+    app.add_middleware(CsrfProbeMiddleware)
+
+    @app.post("/upload")
+    async def upload(request: Request):
+        form = await request.form()
+        file_obj = form.get("bgm_waiting_file")
+        return {
+            "csrf": str(getattr(request.state, "probed_csrf", "")),
+            "filename": str(getattr(file_obj, "filename", "")),
+        }
+
+    client = TestClient(app)
+    response = client.post(
+        "/upload",
+        data={"csrf_token": "token-xyz"},
+        files={"bgm_waiting_file": ("waiting.mp3", b"abc", "audio/mpeg")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"csrf": "token-xyz", "filename": "waiting.mp3"}
