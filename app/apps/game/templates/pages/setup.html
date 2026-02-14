@@ -40,7 +40,7 @@
             <select name="ai_model_id" class="input w-full">
               {% for model in ai_models %}
               <option value="{{ model.id|string }}" {% if player.ai_model_id == model.id|string %}selected{% endif %}>
-                {{ model.name }} - {{ model.model_name }}
+                {{ model.name }}
               </option>
               {% endfor %}
             </select>
