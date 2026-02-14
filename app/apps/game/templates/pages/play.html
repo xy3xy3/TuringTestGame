@@ -191,10 +191,16 @@ const playerId = '{{ player_id }}';
 let currentRound = {{ current_round }};
 let currentPhase = 'waiting';
 let currentRoundId = '';
+const phaseDurations = {
+  setup: {{ room.config.setup_duration }},
+  questioning: {{ room.config.question_duration }},
+  answering: {{ room.config.answer_duration }},
+  voting: {{ room.config.vote_duration }},
+};
 
 // 倒计时相关
 let countdownRemaining = 0;
-let countdownTotal = 30;  // 当前阶段总时长
+let countdownTotal = phaseDurations.questioning;  // 当前阶段总时长
 let countdownInterval = null;
 
 // SSE 连接
@@ -235,7 +241,8 @@ function startLocalCountdown(remaining, total) {
 // 更新倒计时显示
 function updateCountdownDisplay() {
   document.getElementById('countdown').textContent = countdownRemaining;
-  document.getElementById('progress-bar').style.width = `${(countdownRemaining / countdownTotal) * 100}%`;
+  const percent = countdownTotal > 0 ? (countdownRemaining / countdownTotal) * 100 : 0;
+  document.getElementById('progress-bar').style.width = `${percent}%`;
 }
 
 // 停止本地倒计时
@@ -303,6 +310,10 @@ function connectSSE() {
     updatePhaseDisplay('answering');
   });
 
+  eventSource.addEventListener('answer_phase', () => {
+    updatePhaseDisplay('answering');
+  });
+
   eventSource.addEventListener('answer_submitted', (e) => {
     document.getElementById('loading-area').classList.remove('hidden');
     document.getElementById('answer-content').classList.add('hidden');
@@ -318,15 +329,15 @@ function connectSSE() {
     updatePhaseDisplay('voting');
   });
 
+  eventSource.addEventListener('voting_phase', () => {
+    updatePhaseDisplay('voting');
+  });
+
   eventSource.addEventListener('countdown', (e) => {
     const data = JSON.parse(e.data);
     // 使用服务器时间同步本地倒计时，避免跳来跳去
     // 根据当前阶段设置总时长
-    let totalTime = 30;  // 默认
-    if (data.phase === 'questioning') totalTime = 30;
-    else if (data.phase === 'answering') totalTime = 45;
-    else if (data.phase === 'voting') totalTime = 15;
-    else if (data.phase === 'setup') totalTime = 60;
+    const totalTime = phaseDurations[data.phase] || countdownTotal || phaseDurations.questioning;
     
     // 同步剩余时间并启动本地倒计时
     startLocalCountdown(data.remaining, totalTime);
@@ -414,6 +425,7 @@ function updateScoreBoard(playerScores) {
 }
 
 async function submitQuestion() {
+  if (!currentRoundId) return;
   const input = document.getElementById('question-input');
   const question = input.value.trim();
   if (!question) return;
@@ -456,6 +468,7 @@ function showHumanAnswer() {
 }
 
 async function submitAIAnswer() {
+  if (!currentRoundId) return;
   // 立即隐藏选择区域，防止重复点击
   document.getElementById('answer-choice-area').classList.add('hidden');
   document.getElementById('wait-area').classList.remove('hidden');
@@ -469,6 +482,7 @@ async function submitAIAnswer() {
 }
 
 async function submitHumanAnswer() {
+  if (!currentRoundId) return;
   const input = document.getElementById('answer-input');
   const answer = input.value.trim();
   if (!answer) return;
@@ -488,6 +502,7 @@ async function submitHumanAnswer() {
 }
 
 async function submitVote(vote) {
+  if (!currentRoundId) return;
   await fetch(`/game/${roomId}/vote`, {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -581,6 +596,13 @@ async function initGameState() {
 // 页面加载时先获取状态，再连接 SSE
 initGameState().then(() => {
   connectSSE();
+});
+
+window.addEventListener('beforeunload', () => {
+  stopLocalCountdown();
+  if (eventSource) {
+    eventSource.close();
+  }
 });
 </script>
 {% endblock %}

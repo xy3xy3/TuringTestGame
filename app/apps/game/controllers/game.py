@@ -7,10 +7,13 @@ from typing import Any
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from beanie import PydanticObjectId
 
+from app.models.game_player import GamePlayer
+from app.models.game_room import GameRoom
 from app.services import game_room_service, game_manager, ai_chat_service, sse_manager, config_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,6 +30,39 @@ def _get_player_from_cookie(request: Request) -> tuple[str, str] | None:
     if not player_id or not player_token:
         return None
     return player_id, player_token
+
+
+async def _get_authed_player(request: Request, room: GameRoom | None = None) -> GamePlayer | None:
+    """从 Cookie 获取并校验当前玩家，必要时校验是否属于指定房间。"""
+    player_info = _get_player_from_cookie(request)
+    if not player_info:
+        return None
+
+    player_id, player_token = player_info
+    try:
+        object_id = PydanticObjectId(player_id)
+    except Exception:
+        return None
+
+    query: dict[str, Any] = {
+        "_id": object_id,
+        "token": player_token,
+    }
+    if room:
+        query["room_id"] = room.room_id
+
+    return await GamePlayer.find_one(query)
+
+
+def _redirect_by_phase(room_id: str, phase: str) -> RedirectResponse | None:
+    """根据房间阶段返回前端应该跳转的页面。"""
+    if phase == "setup":
+        return RedirectResponse(url=f"/game/{room_id}/setup", status_code=302)
+    if phase == "playing":
+        return RedirectResponse(url=f"/game/{room_id}/play", status_code=302)
+    if phase == "finished":
+        return RedirectResponse(url=f"/game/{room_id}/result", status_code=302)
+    return None
 
 
 @router.get("", response_class=HTMLResponse)
@@ -105,15 +141,15 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
     if not room:
         raise HTTPException(status_code=404, detail="房间不存在")
 
+    redirect = _redirect_by_phase(room_id, room.phase)
+    if redirect:
+        return redirect
+
     # 使用房间的 room_id（6位码）来查询玩家
     players = await game_room_service.get_players_in_room(room.room_id)
 
-    # 获取当前玩家信息
-    player_info = _get_player_from_cookie(request)
-    current_player = None
-    if player_info:
-        player_id, _ = player_info
-        current_player = next((p for p in players if str(p.id) == player_id), None)
+    # 获取当前玩家信息并校验 token
+    current_player = await _get_authed_player(request, room)
 
     # 生成邀请链接
     base_url = await config_service.get_base_url()
@@ -149,48 +185,47 @@ async def result_page(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/reconnect")
 async def reconnect(request: Request) -> dict[str, Any]:
     """重新连接（通过 player_id）。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
+    player = await _get_authed_player(request)
+    if not player:
         return {"success": False, "error": "未登录"}
 
-    player_id, _ = player_info
-
-    # 查找玩家
-    from app.models.game_player import GamePlayer
-    from beanie import PydanticObjectId
-
-    try:
-        player = await GamePlayer.find_one({"_id": PydanticObjectId(player_id)})
-    except Exception:
-        return {"success": False, "error": "玩家不存在"}
-
-    if not player:
-        return {"success": False, "error": "玩家不存在"}
-
-    room = await game_room_service.get_room_by_id(player.room_id)
+    # player.room_id 存的是 6 位房间码，需要按邀请码查询房间
+    room = await game_room_service.get_room_by_code(player.room_id)
     if not room:
         return {"success": False, "error": "房间不存在"}
+
+    redirect_path = f"/game/{room.id}"
+    if room.phase == "setup":
+        redirect_path = f"/game/{room.id}/setup"
+    elif room.phase == "playing":
+        redirect_path = f"/game/{room.id}/play"
+    elif room.phase == "finished":
+        redirect_path = f"/game/{room.id}/result"
 
     # 返回房间信息，让前端跳转到对应页面
     return {
         "success": True,
-        "room_id": player.room_id,
+        "room_id": str(room.id),
+        "room_code": room.room_id,
         "phase": room.phase,
+        "redirect": redirect_path,
     }
 
 
 @router.get("/{room_id}/play", response_class=HTMLResponse)
 async def play_page(request: Request, room_id: str) -> HTMLResponse:
     """游戏进行页面。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        raise HTTPException(status_code=401, detail="未登录")
-
-    player_id, _ = player_info
-
     room = await game_room_service.get_room_by_id(room_id)
     if not room:
         raise HTTPException(status_code=404, detail="房间不存在")
+
+    redirect = _redirect_by_phase(room_id, room.phase)
+    if redirect and room.phase != "playing":
+        return redirect
+
+    player = await _get_authed_player(request, room)
+    if not player:
+        raise HTTPException(status_code=401, detail="未登录")
 
     # 使用房间的 room_id（6位码）来查询玩家
     players = await game_room_service.get_players_in_room(room.room_id)
@@ -200,7 +235,7 @@ async def play_page(request: Request, room_id: str) -> HTMLResponse:
         {
             "request": request,
             "room": room,
-            "player_id": player_id,
+            "player_id": str(player.id),
             "current_round": room.current_round,
             "players": players,
         },
@@ -210,21 +245,17 @@ async def play_page(request: Request, room_id: str) -> HTMLResponse:
 @router.get("/{room_id}/setup", response_class=HTMLResponse)
 async def setup_page(request: Request, room_id: str) -> HTMLResponse:
     """灵魂注入页面。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        raise HTTPException(status_code=401, detail="未登录")
-
-    player_id, _ = player_info
-
     room = await game_room_service.get_room_by_id(room_id)
     if not room:
         raise HTTPException(status_code=404, detail="房间不存在")
 
-    # 使用房间的 room_id（6位码）来查询玩家
-    players = await game_room_service.get_players_in_room(room.room_id)
-    player = next((p for p in players if str(p.id) == player_id), None)
+    redirect = _redirect_by_phase(room_id, room.phase)
+    if redirect and room.phase != "setup":
+        return redirect
+
+    player = await _get_authed_player(request, room)
     if not player:
-        raise HTTPException(status_code=404, detail="玩家不存在")
+        raise HTTPException(status_code=401, detail="未登录或玩家不存在")
 
     # 获取可用 AI 模型
     ai_models = await ai_chat_service.get_enabled_models()
@@ -243,11 +274,13 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/setup", response_class=HTMLResponse)
 async def submit_setup(request: Request, room_id: str) -> HTMLResponse:
     """提交灵魂注入设置。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     form_data = await request.form()
     system_prompt = str(form_data.get("system_prompt", "")).strip()
@@ -258,7 +291,7 @@ async def submit_setup(request: Request, room_id: str) -> HTMLResponse:
 
     result = await game_room_service.update_player_setup(
         room_id=room_id,
-        player_id=player_id,
+        player_id=str(player.id),
         system_prompt=system_prompt,
         ai_model_id=ai_model_id,
     )
@@ -271,16 +304,18 @@ async def submit_setup(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/ready", response_class=HTMLResponse)
 async def set_ready(request: Request, room_id: str) -> HTMLResponse:
     """设置准备状态。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     form_data = await request.form()
     is_ready = form_data.get("is_ready", "true").strip().lower() == "true"
 
-    result = await game_room_service.set_player_ready(room_id, player_id, is_ready)
+    result = await game_room_service.set_player_ready(room_id, str(player.id), is_ready)
 
     if result["success"]:
         # 只更新准备状态，不自动开始游戏
@@ -292,20 +327,17 @@ async def set_ready(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/start", response_class=HTMLResponse)
 async def start_game(request: Request, room_id: str) -> HTMLResponse:
     """开始游戏（房主操作）。"""
-    # 获取当前玩家
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
-
-    player_id, _ = player_info
-
     # 验证房主身份
     room = await game_room_service.get_room_by_id(room_id)
     if not room:
         return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+
     players = await game_room_service.get_players_in_room(room.room_id)
-    current_player = next((p for p in players if str(p.id) == player_id), None)
+    current_player = next((p for p in players if str(p.id) == str(player.id)), None)
     if not current_player or not current_player.is_owner:
         return HTMLResponse(content='<div class="text-red-400">只有房主才能开始游戏</div>')
 
@@ -329,13 +361,15 @@ async def start_game(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/kick/{player_id}", response_class=HTMLResponse)
 async def kick_player(request: Request, room_id: str, player_id: str) -> HTMLResponse:
     """踢出玩家（房主操作）。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
+
+    requester = await _get_authed_player(request, room)
+    if not requester:
         return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
-    requester_id, _ = player_info
-
-    result = await game_room_service.kick_player(room_id, player_id, requester_id)
+    result = await game_room_service.kick_player(room_id, player_id, str(requester.id))
 
     if result["success"]:
         # 通知其他玩家
@@ -350,11 +384,13 @@ async def kick_player(request: Request, room_id: str, player_id: str) -> HTMLRes
 @router.post("/{room_id}/question", response_class=HTMLResponse)
 async def submit_question(request: Request, room_id: str) -> HTMLResponse:
     """提交问题。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     form_data = await request.form()
     question = str(form_data.get("question", "")).strip()
@@ -363,7 +399,7 @@ async def submit_question(request: Request, room_id: str) -> HTMLResponse:
     if not question:
         return HTMLResponse(content='<div class="text-red-400">问题不能为空</div>')
 
-    result = await game_manager.submit_question(room_id, round_id, player_id, question)
+    result = await game_manager.submit_question(room_id, round_id, str(player.id), question)
 
     if result["success"]:
         return HTMLResponse(content='<div class="text-green-400">问题已提交</div>')
@@ -373,11 +409,13 @@ async def submit_question(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/answer", response_class=HTMLResponse)
 async def submit_answer(request: Request, room_id: str) -> HTMLResponse:
     """提交回答。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     form_data = await request.form()
     answer_type = str(form_data.get("answer_type", "")).strip()
@@ -387,7 +425,7 @@ async def submit_answer(request: Request, room_id: str) -> HTMLResponse:
     if answer_type not in ("human", "ai"):
         return HTMLResponse(content='<div class="text-red-400">无效的回答类型</div>')
 
-    result = await game_manager.submit_answer(room_id, round_id, player_id, answer_type, answer_content)
+    result = await game_manager.submit_answer(room_id, round_id, str(player.id), answer_type, answer_content)
 
     if result["success"]:
         return HTMLResponse(content='<div class="text-green-400">回答已提交</div>')
@@ -397,11 +435,13 @@ async def submit_answer(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/vote", response_class=HTMLResponse)
 async def submit_vote(request: Request, room_id: str) -> HTMLResponse:
     """提交投票。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
-        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
 
     form_data = await request.form()
     vote = str(form_data.get("vote", "")).strip()
@@ -410,7 +450,7 @@ async def submit_vote(request: Request, room_id: str) -> HTMLResponse:
     if vote not in ("human", "ai", "skip"):
         return HTMLResponse(content='<div class="text-red-400">无效的投票选项</div>')
 
-    result = await game_manager.submit_vote(room_id, round_id, player_id, vote)
+    result = await game_manager.submit_vote(room_id, round_id, str(player.id), vote)
 
     if result["success"]:
         return HTMLResponse(content='<div class="text-green-400">投票已提交</div>')
@@ -420,13 +460,15 @@ async def submit_vote(request: Request, room_id: str) -> HTMLResponse:
 @router.post("/{room_id}/leave", response_class=HTMLResponse)
 async def leave_room(request: Request, room_id: str) -> HTMLResponse:
     """离开房间。"""
-    player_info = _get_player_from_cookie(request)
-    if not player_info:
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
         return HTMLResponse(content='<script>window.location.href="/game";</script>')
 
-    player_id, _ = player_info
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<script>window.location.href="/game";</script>')
 
-    result = await game_room_service.leave_room(room_id, player_id)
+    result = await game_room_service.leave_room(room_id, str(player.id))
 
     if result["success"]:
         # 清除玩家 Cookie

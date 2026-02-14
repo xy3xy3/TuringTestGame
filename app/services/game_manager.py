@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
-from typing import Any, AsyncIterator
+from datetime import datetime, timezone
+from typing import Any
 
 from beanie import PydanticObjectId
 
@@ -390,6 +389,9 @@ class GameManager:
         game_round.answer_submitted_at = datetime.now(timezone.utc)
         await game_round.save()
 
+        # 回答已提交后立即终止回答阶段倒计时，避免超时逻辑与正常流程并发触发。
+        self._cancel_timer(room_id)
+
         # 通知所有玩家回答已提交（显示"正在输入..."）
         await sse_manager.publish(room_id, "answer_submitted", {
             "display_delay": display_delay,
@@ -409,7 +411,6 @@ class GameManager:
             return
 
         game_round.answer_displayed_at = datetime.now(timezone.utc)
-        game_round.status = "voting"
         await game_round.save()
 
         room = await game_room_service.get_room_by_id(room_id)
@@ -435,8 +436,8 @@ class GameManager:
         if not game_round:
             return
 
-        # 避免重复进入投票阶段
-        if game_round.status == "voting":
+        # 避免重复进入投票/结算阶段。
+        if game_round.status in {"voting", "revealed"}:
             return
 
         game_round.status = "voting"
@@ -496,6 +497,9 @@ class GameManager:
         game_round = await GameRound.get(PydanticObjectId(round_id))
         if not game_round:
             return {"success": False, "error": "回合不存在"}
+
+        if game_round.status != "voting":
+            return {"success": False, "error": "当前不在投票阶段"}
 
         # 检查是否是陪审团成员（除被测者外）
         if player_id == game_round.subject_id:
@@ -583,8 +587,8 @@ class GameManager:
             "player_scores": player_scores_list,
         })
 
-        # 等待几秒后开始下一轮
-        await asyncio.sleep(5)
+        # 等待配置中的揭晓时长后开始下一轮/结束游戏。
+        await asyncio.sleep(room.config.reveal_delay)
 
         # 判断是否结束游戏
         if game_round.round_number >= room.total_rounds:

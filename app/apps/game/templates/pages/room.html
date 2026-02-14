@@ -64,6 +64,7 @@
 
     <!-- 操作按钮 -->
     <div class="flex gap-4">
+      {% if current_player %}
       <button
         id="ready-btn"
         class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500"
@@ -73,10 +74,11 @@
       >
         {% if current_player and current_player.is_ready %}取消准备{% else %}准备{% endif %}
       </button>
+      {% endif %}
       {% if current_player and current_player.is_owner %}
       <button
         id="start-btn"
-        class="flex-1 btn-primary"
+        class="flex-1 btn-primary opacity-50 cursor-not-allowed"
         hx-post="/game/{{ room.id }}/start"
         hx-target="#start-result"
         disabled
@@ -93,12 +95,12 @@
         离开
       </button>
     </div>
+    {% if not current_player %}
+    <p class="mt-3 text-sm text-red-300">你不在该房间中，请返回首页重新加入房间。</p>
+    {% endif %}
 
     <div id="ready-result" class="mt-4"></div>
     <div id="start-result" class="mt-4"></div>
-
-    <!-- SSE 事件监听 -->
-    <div id="sse-data" class="hidden" data-room-id="{{ room.id }}"></div>
   </div>
 </div>
 
@@ -211,6 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(e => console.error('Failed to fetch room state:', e));
   };
 
+  function refreshPlayerList() {
+    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+  }
+
   // SSE 连接
   const eventSource = new EventSource(`/game/${roomId}/events`);
 
@@ -220,22 +226,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   eventSource.addEventListener('player_joined', (e) => {
     console.log('SSE event: player_joined', e.data);
-    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    refreshPlayerList();
     // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
     window.updateReadyButtonState();
   });
 
   eventSource.addEventListener('player_left', (e) => {
     console.log('SSE event: player_left', e.data);
-    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    refreshPlayerList();
     // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
     window.updateReadyButtonState();
   });
 
   eventSource.addEventListener('player_ready_changed', (e) => {
     console.log('SSE event: player_ready_changed', e.data);
-    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+    refreshPlayerList();
     // 更新准备按钮状态
+    window.updateReadyButtonState();
+  });
+
+  eventSource.addEventListener('player_kicked', (e) => {
+    console.log('SSE event: player_kicked', e.data);
+    const data = JSON.parse(e.data || '{}');
+    const currentPlayerId = getCurrentPlayerId();
+    if (data.player_id && data.player_id === currentPlayerId) {
+      window.location.href = '/game';
+      return;
+    }
+    refreshPlayerList();
     window.updateReadyButtonState();
   });
 
@@ -247,6 +265,18 @@ document.addEventListener('DOMContentLoaded', () => {
   eventSource.onerror = (e) => {
     console.log('SSE connection error', e);
   };
+
+  window.addEventListener('beforeunload', () => {
+    eventSource.close();
+  });
+
+  document.body.addEventListener('htmx:afterRequest', (evt) => {
+    const path = evt.detail?.pathInfo?.requestPath || '';
+    if (!path.includes(`/game/${roomId}/ready`) && !path.includes(`/game/${roomId}/start`)) {
+      return;
+    }
+    window.updateReadyButtonState();
+  });
 
   // 初始化
   window.updateReadyButtonState();

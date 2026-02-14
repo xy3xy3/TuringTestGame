@@ -70,7 +70,7 @@
             placeholder="输入测试消息..."
             onkeypress="if(event.key==='Enter') sendTestMessage()"
           />
-          <button class="btn-primary px-4" onclick="sendTestMessage()">
+          <button type="button" class="btn-primary px-4" onclick="sendTestMessage()">
             <i class="fa-solid fa-paper-plane"></i>
           </button>
         </div>
@@ -250,16 +250,9 @@ async function sendTestMessage() {
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-// 处理表单提交
-document.addEventListener('htmx:afterSwap', function(evt) {
-  if (evt.detail.target.id === 'setup-result') {
-    try {
-      const data = JSON.parse(evt.detail.target.textContent);
-      if (data.success) {
-        document.getElementById('setup-result').innerHTML = '<p class="text-green-400">设置已锁定！等待其他玩家...</p>';
-      }
-    } catch (e) {}
-  }
+window.addEventListener('beforeunload', () => {
+  if (timerInterval) clearInterval(timerInterval);
+  eventSource.close();
 });
 </script>
 {% endblock %}
