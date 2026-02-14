@@ -171,10 +171,12 @@ async def config_save(
     cleanup_enabled = form_data.get("cleanup_enabled") == "on"
     cleanup_retention_days = int(form_data.get("cleanup_retention_days", "7") or "7")
     cleanup_interval_hours = int(form_data.get("cleanup_interval_hours", "24") or "24")
+    cleanup_waiting_timeout_minutes = int(form_data.get("cleanup_waiting_timeout_minutes", "30") or "30")
     await cleanup_service.save_cleanup_config(
         enabled=cleanup_enabled,
         retention_days=cleanup_retention_days,
         interval_hours=cleanup_interval_hours,
+        waiting_timeout_minutes=cleanup_waiting_timeout_minutes,
     )
     restart_cleanup_scheduler()
 
@@ -203,7 +205,7 @@ async def config_save(
     base_url = await config_service.get_base_url()
     footer_copyright = await config_service.get_footer_copyright()
     rate_limit_config = await config_service.get_rate_limit_config()
-    cleanup_config = await config_service.get_cleanup_config()
+    cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
     game_role_balance_config = await config_service.get_game_role_balance_config()
     context = {

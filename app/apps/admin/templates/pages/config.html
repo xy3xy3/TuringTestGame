@@ -567,6 +567,19 @@
           />
           <p class="text-xs text-slate-500 mt-1">自动清理的执行间隔（默认24小时）</p>
         </div>
+        <div class="md:col-span-4">
+          <label class="label">等待加入超时（分钟）</label>
+          <input
+            name="cleanup_waiting_timeout_minutes"
+            type="number"
+            min="1"
+            max="10080"
+            class="input"
+            value="{{ cleanup_config.waiting_timeout_minutes }}"
+            {% if not config_perm['update'] %}readonly{% endif %}
+          />
+          <p class="text-xs text-slate-500 mt-1">等待中房间超过该时长无人完成加入流程将被清理（默认30分钟）</p>
+        </div>
       </div>
 
       <div class="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -575,6 +588,7 @@
         </h3>
         <ul class="text-sm text-amber-700 space-y-1 pl-5 list-disc">
           <li>仅清理状态为"已结束"的游戏房间数据</li>
+          <li>会清理等待加入超时的房间，防止恶意创建大量空房间</li>
           <li>清理时会同时删除关联的玩家、回合和投票记录</li>
           <li>进行中的游戏数据不会被清理</li>
           <li>清理操作不可恢复，请确保已开启备份功能</li>

@@ -1,4 +1,4 @@
-"""游戏数据垃圾清理服务 - 定期清理已结束的游戏数据。"""
+"""游戏数据垃圾清理服务 - 定期清理过期房间与关联数据。"""
 
 from __future__ import annotations
 
@@ -18,11 +18,32 @@ logger = logging.getLogger(__name__)
 # 默认配置
 DEFAULT_RETENTION_DAYS = 7  # 默认保留7天
 DEFAULT_CLEANUP_INTERVAL_HOURS = 24  # 默认每天清理一次
+DEFAULT_WAITING_TIMEOUT_MINUTES = 30  # 等待加入超时，默认30分钟
 
 # 配置键
 CLEANUP_ENABLED_KEY = "cleanup_enabled"
 CLEANUP_RETENTION_DAYS_KEY = "cleanup_retention_days"
 CLEANUP_INTERVAL_HOURS_KEY = "cleanup_interval_hours"
+CLEANUP_WAITING_TIMEOUT_MINUTES_KEY = "cleanup_waiting_timeout_minutes"
+
+
+def _to_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    """把任意输入转换为整数，并裁剪到指定范围。"""
+    try:
+        parsed = int(str(value).strip())
+    except Exception:
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def _extract_deleted_count(result: object) -> int:
+    """兼容不同删除返回值，统一读取删除数量。"""
+    if hasattr(result, "deleted_count"):
+        return int(getattr(result, "deleted_count", 0) or 0)
+    try:
+        return int(result)  # 兼容某些驱动直接返回 int 的场景
+    except Exception:
+        return 0
 
 
 async def get_cleanup_config() -> dict[str, Any]:
@@ -30,11 +51,28 @@ async def get_cleanup_config() -> dict[str, Any]:
     enabled_item = await ConfigItem.find_one({"group": "cleanup", "key": CLEANUP_ENABLED_KEY})
     retention_item = await ConfigItem.find_one({"group": "cleanup", "key": CLEANUP_RETENTION_DAYS_KEY})
     interval_item = await ConfigItem.find_one({"group": "cleanup", "key": CLEANUP_INTERVAL_HOURS_KEY})
+    waiting_timeout_item = await ConfigItem.find_one({"group": "cleanup", "key": CLEANUP_WAITING_TIMEOUT_MINUTES_KEY})
 
     return {
         "enabled": enabled_item.value.lower() == "true" if enabled_item else True,
-        "retention_days": int(retention_item.value) if retention_item else DEFAULT_RETENTION_DAYS,
-        "interval_hours": int(interval_item.value) if interval_item else DEFAULT_CLEANUP_INTERVAL_HOURS,
+        "retention_days": _to_int(
+            retention_item.value if retention_item else DEFAULT_RETENTION_DAYS,
+            default=DEFAULT_RETENTION_DAYS,
+            minimum=1,
+            maximum=365,
+        ),
+        "interval_hours": _to_int(
+            interval_item.value if interval_item else DEFAULT_CLEANUP_INTERVAL_HOURS,
+            default=DEFAULT_CLEANUP_INTERVAL_HOURS,
+            minimum=1,
+            maximum=168,
+        ),
+        "waiting_timeout_minutes": _to_int(
+            waiting_timeout_item.value if waiting_timeout_item else DEFAULT_WAITING_TIMEOUT_MINUTES,
+            default=DEFAULT_WAITING_TIMEOUT_MINUTES,
+            minimum=1,
+            maximum=10080,
+        ),
     }
 
 
@@ -42,12 +80,33 @@ async def save_cleanup_config(
     enabled: bool = True,
     retention_days: int = DEFAULT_RETENTION_DAYS,
     interval_hours: int = DEFAULT_CLEANUP_INTERVAL_HOURS,
+    waiting_timeout_minutes: int = DEFAULT_WAITING_TIMEOUT_MINUTES,
 ) -> dict[str, Any]:
     """保存清理配置。"""
+    normalized_retention_days = _to_int(
+        retention_days,
+        default=DEFAULT_RETENTION_DAYS,
+        minimum=1,
+        maximum=365,
+    )
+    normalized_interval_hours = _to_int(
+        interval_hours,
+        default=DEFAULT_CLEANUP_INTERVAL_HOURS,
+        minimum=1,
+        maximum=168,
+    )
+    normalized_waiting_timeout_minutes = _to_int(
+        waiting_timeout_minutes,
+        default=DEFAULT_WAITING_TIMEOUT_MINUTES,
+        minimum=1,
+        maximum=10080,
+    )
+
     configs = [
         (CLEANUP_ENABLED_KEY, str(enabled).lower(), "是否启用自动清理"),
-        (CLEANUP_RETENTION_DAYS_KEY, str(retention_days), "数据保留天数"),
-        (CLEANUP_INTERVAL_HOURS_KEY, str(interval_hours), "清理间隔小时数"),
+        (CLEANUP_RETENTION_DAYS_KEY, str(normalized_retention_days), "已结束房间数据保留天数"),
+        (CLEANUP_INTERVAL_HOURS_KEY, str(normalized_interval_hours), "清理间隔小时数"),
+        (CLEANUP_WAITING_TIMEOUT_MINUTES_KEY, str(normalized_waiting_timeout_minutes), "等待加入超时清理分钟数"),
     ]
 
     for key, value, description in configs:
@@ -69,71 +128,89 @@ async def save_cleanup_config(
     return await get_cleanup_config()
 
 
+async def _cleanup_room_batch(rooms: list[GameRoom]) -> dict[str, int]:
+    """按房间批量清理房间及关联玩家/回合/投票记录。"""
+    if not rooms:
+        return {"rooms": 0, "players": 0, "rounds": 0, "votes": 0}
+
+    room_ids = [room.room_id for room in rooms]
+    room_object_ids = [room.id for room in rooms]
+
+    vote_result = await VoteRecord.find({"room_id": {"$in": room_ids}}).delete_many()
+    round_result = await GameRound.find({"room_id": {"$in": room_ids}}).delete_many()
+    player_result = await GamePlayer.find({"room_id": {"$in": room_ids}}).delete_many()
+    room_result = await GameRoom.find({"_id": {"$in": room_object_ids}}).delete_many()
+
+    return {
+        "votes": _extract_deleted_count(vote_result),
+        "rounds": _extract_deleted_count(round_result),
+        "players": _extract_deleted_count(player_result),
+        "rooms": _extract_deleted_count(room_result),
+    }
+
+
 async def cleanup_finished_games() -> dict[str, int]:
-    """清理已结束的游戏数据。
+    """清理过期游戏数据（已结束超保留期 + 等待加入超时房间）。
 
     Returns:
         清理统计信息，包含删除的各类记录数量
     """
     config = await get_cleanup_config()
     retention_days = config.get("retention_days", DEFAULT_RETENTION_DAYS)
+    waiting_timeout_minutes = config.get("waiting_timeout_minutes", DEFAULT_WAITING_TIMEOUT_MINUTES)
 
-    # 计算截止日期
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    now = datetime.now(timezone.utc)
+    finished_cutoff_date = now - timedelta(days=retention_days)
+    waiting_cutoff_date = now - timedelta(minutes=waiting_timeout_minutes)
 
-    logger.info("开始清理数据：保留 %d 天内的数据，截止日期: %s", retention_days, cutoff_date.isoformat())
+    logger.info(
+        "开始清理数据：已结束保留=%d天(截止%s)，等待加入超时=%d分钟(截止%s)",
+        retention_days,
+        finished_cutoff_date.isoformat(),
+        waiting_timeout_minutes,
+        waiting_cutoff_date.isoformat(),
+    )
 
     stats = {
         "rooms": 0,
         "players": 0,
         "rounds": 0,
         "votes": 0,
+        "expired_waiting_rooms": 0,
+        "expired_waiting_players": 0,
     }
 
     try:
-        # 1. 查找已结束且超过保留期的房间
+        # 1) 清理已结束且超过保留期的房间
         finished_rooms = await GameRoom.find({
             "phase": "finished",
-            "finished_at": {"$lt": cutoff_date},
+            "finished_at": {"$lt": finished_cutoff_date},
         }).to_list()
+        logger.info("找到 %d 个需要清理的已结束房间", len(finished_rooms))
+        finished_batch_stats = await _cleanup_room_batch(finished_rooms)
+        for key in ("rooms", "players", "rounds", "votes"):
+            stats[key] += finished_batch_stats[key]
 
-        room_ids = [room.room_id for room in finished_rooms]
-        logger.info("找到 %d 个需要清理的已结束房间", len(room_ids))
-
-        if not room_ids:
-            return stats
-
-        # 2. 删除这些房间关联的投票记录
-        vote_result = await VoteRecord.find({
-            "room_id": {"$in": room_ids},
-        }).delete_many()
-        stats["votes"] = vote_result.deleted_count if hasattr(vote_result, 'deleted_count') else 0
-        logger.info("删除投票记录: %d 条", stats["votes"])
-
-        # 3. 删除这些房间关联的回合记录
-        round_result = await GameRound.find({
-            "room_id": {"$in": room_ids},
-        }).delete_many()
-        stats["rounds"] = round_result.deleted_count if hasattr(round_result, 'deleted_count') else 0
-        logger.info("删除回合记录: %d 条", stats["rounds"])
-
-        # 4. 删除这些房间关联的玩家记录
-        player_result = await GamePlayer.find({
-            "room_id": {"$in": room_ids},
-        }).delete_many()
-        stats["players"] = player_result.deleted_count if hasattr(player_result, 'deleted_count') else 0
-        logger.info("删除玩家记录: %d 条", stats["players"])
-
-        # 5. 最后删除房间记录
-        room_result = await GameRoom.find({
-            "_id": {"$in": [room.id for room in finished_rooms]},
-        }).delete_many()
-        stats["rooms"] = room_result.deleted_count if hasattr(room_result, 'deleted_count') else 0
-        logger.info("删除房间记录: %d 条", stats["rooms"])
+        # 2) 清理等待加入超时房间，防止恶意堆积
+        expired_waiting_rooms = await GameRoom.find({
+            "phase": "waiting",
+            "created_at": {"$lt": waiting_cutoff_date},
+        }).to_list()
+        logger.info("找到 %d 个等待加入超时房间", len(expired_waiting_rooms))
+        waiting_batch_stats = await _cleanup_room_batch(expired_waiting_rooms)
+        for key in ("rooms", "players", "rounds", "votes"):
+            stats[key] += waiting_batch_stats[key]
+        stats["expired_waiting_rooms"] = waiting_batch_stats["rooms"]
+        stats["expired_waiting_players"] = waiting_batch_stats["players"]
 
         logger.info(
-            "清理完成：房间=%d, 玩家=%d, 回合=%d, 投票=%d",
-            stats["rooms"], stats["players"], stats["rounds"], stats["votes"],
+            "清理完成：房间=%d(等待超时=%d), 玩家=%d(等待超时=%d), 回合=%d, 投票=%d",
+            stats["rooms"],
+            stats["expired_waiting_rooms"],
+            stats["players"],
+            stats["expired_waiting_players"],
+            stats["rounds"],
+            stats["votes"],
         )
 
     except Exception as exc:
@@ -171,8 +248,13 @@ async def _cleanup_scheduler_loop() -> None:
             logger.info("垃圾清理调度：开始执行清理任务")
             stats = await cleanup_finished_games()
             logger.info(
-                "垃圾清理完成：清理房间 %d 个，玩家 %d 个，回合 %d 个，投票 %d 条",
-                stats["rooms"], stats["players"], stats["rounds"], stats["votes"],
+                "垃圾清理完成：房间 %d 个(等待超时 %d)，玩家 %d 个(等待超时 %d)，回合 %d 个，投票 %d 条",
+                stats["rooms"],
+                stats["expired_waiting_rooms"],
+                stats["players"],
+                stats["expired_waiting_players"],
+                stats["rounds"],
+                stats["votes"],
             )
 
         except asyncio.CancelledError:
