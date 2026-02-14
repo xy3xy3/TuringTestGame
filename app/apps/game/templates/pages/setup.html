@@ -95,6 +95,7 @@ let timerInterval = null;
 let hasNavigated = false;  // 防止重复跳转
 let eventSource = null;
 let phasePollingTimer = null;
+let lastRemaining = setupTime;
 
 function navigateToPlay() {
   if (hasNavigated) return;
@@ -139,13 +140,21 @@ function getRemainingTime() {
   if (!startedAt) return setupTime;
   const now = Date.now();
   const elapsed = (now - startedAt) / 1000;  // 转换为秒
-  const remaining = Math.max(0, Math.floor(setupTime - elapsed));
+  // 使用 ceil 避免本地计时“抢跑”导致比服务端先减 1。
+  const remaining = Math.max(0, Math.ceil(setupTime - elapsed));
   return remaining;
 }
 
-// 更新倒计时显示
-function updateCountdown() {
-  const remaining = getRemainingTime();
+function applyCountdown(remainingValue) {
+  const parsed = Number(remainingValue);
+  if (!Number.isFinite(parsed)) return;
+
+  const normalized = Math.max(0, Math.min(setupTime, Math.floor(parsed)));
+  // SSE 与本地定时器并存时，网络抖动可能让旧事件晚到，导致数字“倒着走”。
+  // 这里强制倒计时单调不增，避免右上角出现回弹。
+  const remaining = Math.min(normalized, lastRemaining);
+  lastRemaining = remaining;
+
   document.getElementById('countdown').textContent = remaining;
   document.getElementById('progress-bar').style.width = `${(remaining / setupTime) * 100}%`;
 
@@ -159,6 +168,11 @@ function updateCountdown() {
     }
     ensurePhasePolling();
   }
+}
+
+// 更新倒计时显示
+function updateCountdown() {
+  applyCountdown(getRemainingTime());
 }
 
 // 初始化倒计时显示
@@ -220,12 +234,8 @@ eventSource.addEventListener('countdown', (e) => {
       // 时间戳已带 Z 后缀，直接解析
       startedAt = new Date(data.started_at).getTime();
     }
-    // 直接使用服务器剩余时间更新显示
-    document.getElementById('countdown').textContent = data.remaining;
-    document.getElementById('progress-bar').style.width = `${(data.remaining / setupTime) * 100}%`;
-    if (Number(data.remaining) <= 0) {
-      ensurePhasePolling();
-    }
+    // 使用服务端剩余时间更新（同时做“单调不增”保护）
+    applyCountdown(data.remaining);
   } else if (data.started_at) {
     startedAt = new Date(data.started_at).getTime();
     updateCountdown();
