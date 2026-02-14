@@ -610,13 +610,13 @@
           <input
             name="setup_duration"
             type="number"
-            min="30"
+            min="15"
             max="300"
             class="input"
             value="{{ game_time_config.setup_duration }}"
             {% if not config_perm['update'] %}readonly{% endif %}
           />
-          <p class="text-xs text-slate-500 mt-1">游戏开始前准备时间（30-300秒）</p>
+          <p class="text-xs text-slate-500 mt-1">游戏开始前准备时间（15-300秒）</p>
         </div>
         <div class="md:col-span-6 lg:col-span-4">
           <label class="label">提问阶段时长</label>
@@ -624,25 +624,25 @@
             name="question_duration"
             type="number"
             min="15"
-            max="60"
+            max="300"
             class="input"
             value="{{ game_time_config.question_duration }}"
             {% if not config_perm['update'] %}readonly{% endif %}
           />
-          <p class="text-xs text-slate-500 mt-1">提问者输入问题的时间（15-60秒）</p>
+          <p class="text-xs text-slate-500 mt-1">提问者输入问题的时间（15-300秒）</p>
         </div>
         <div class="md:col-span-6 lg:col-span-4">
           <label class="label">回答阶段时长</label>
           <input
             name="answer_duration"
             type="number"
-            min="20"
-            max="90"
+            min="15"
+            max="300"
             class="input"
             value="{{ game_time_config.answer_duration }}"
             {% if not config_perm['update'] %}readonly{% endif %}
           />
-          <p class="text-xs text-slate-500 mt-1">被测者回答问题的时间（20-90秒）</p>
+          <p class="text-xs text-slate-500 mt-1">被测者回答问题的时间（15-300秒）</p>
         </div>
         <div class="md:col-span-6 lg:col-span-4">
           <label class="label">投票阶段时长</label>

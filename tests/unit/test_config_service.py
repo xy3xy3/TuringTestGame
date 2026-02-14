@@ -209,6 +209,53 @@ async def test_save_rate_limit_config_updates_existing_items(monkeypatch) -> Non
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_save_game_time_config_clamps_to_latest_ranges(monkeypatch) -> None:
+    """保存游戏时长配置时，应按最新区间进行裁剪。"""
+
+    class FakeConfigItem:
+        def __init__(self, value: str) -> None:
+            self.value = value
+            self.name = ""
+            self.description = ""
+            self.updated_at = None
+            self.saved = False
+
+        async def save(self) -> None:
+            self.saved = True
+
+    items = {
+        key: FakeConfigItem(str(default))
+        for key, (_name, default, _minimum, _maximum) in config_service.GAME_TIME_CONFIG_KEYS.items()
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        return items.get(key)
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.save_game_time_config(
+        {
+            "setup_duration": "1",
+            "question_duration": "999",
+            "answer_duration": "14",
+            "vote_duration": "31",
+            "reveal_delay": "0",
+        }
+    )
+
+    assert config["setup_duration"] == 15
+    assert config["question_duration"] == 300
+    assert config["answer_duration"] == 15
+    assert config["vote_duration"] == 30
+    assert config["reveal_delay"] == 1
+    assert items["setup_duration"].value == "15"
+    assert items["question_duration"].value == "300"
+    assert items["answer_duration"].value == "15"
+    assert all(item.saved for item in items.values())
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_game_role_balance_config_returns_default_when_missing(monkeypatch) -> None:
     """未配置角色保底参数时应返回默认值。"""
 

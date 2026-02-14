@@ -316,9 +316,9 @@ async def save_rate_limit_config(payload: dict[str, object]) -> dict[str, int | 
 
 # 游戏时间配置（各阶段时长）
 GAME_TIME_CONFIG_KEYS = {
-    "setup_duration": ("灵魂注入时长", 60, 30, 300),
-    "question_duration": ("提问阶段时长", 30, 15, 60),
-    "answer_duration": ("回答阶段时长", 45, 20, 90),
+    "setup_duration": ("灵魂注入时长", 60, 15, 300),
+    "question_duration": ("提问阶段时长", 30, 15, 300),
+    "answer_duration": ("回答阶段时长", 45, 15, 300),
     "vote_duration": ("投票阶段时长", 15, 10, 30),
     "reveal_delay": ("结果揭晓延迟", 3, 1, 10),
 }

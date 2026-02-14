@@ -24,9 +24,9 @@ def generate_room_id(length: int = 6) -> str:
 class GameConfig(BaseModel):
     """游戏配置。"""
 
-    setup_duration: int = Field(default=60, ge=30, le=300)
-    question_duration: int = Field(default=30, ge=15, le=60)
-    answer_duration: int = Field(default=45, ge=20, le=90)
+    setup_duration: int = Field(default=60, ge=15, le=300)
+    question_duration: int = Field(default=30, ge=15, le=300)
+    answer_duration: int = Field(default=45, ge=15, le=300)
     vote_duration: int = Field(default=15, ge=10, le=30)
     reveal_delay: int = Field(default=3, ge=1, le=10)
     min_players: int = Field(default=2, ge=2, le=16)

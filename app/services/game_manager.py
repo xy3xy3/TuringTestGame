@@ -15,7 +15,7 @@ from app.models.game_room import GameRoom
 from app.models.game_player import GamePlayer
 from app.models.game_round import GameRound
 from app.models.vote_record import VoteRecord
-from app.services import ai_chat_service, game_room_service
+from app.services import ai_chat_service, config_service, game_room_service
 
 
 # SSE 事件管理
@@ -73,6 +73,15 @@ class GameManager:
 
     def __init__(self):
         self._timers: dict[str, asyncio.Task] = {}
+
+    async def _sync_room_time_config(self, room: GameRoom) -> None:
+        """同步房间的游戏阶段时长配置，确保使用系统设置最新值。"""
+        latest = await config_service.get_game_time_config()
+        room.config.setup_duration = int(latest.get("setup_duration", room.config.setup_duration))
+        room.config.question_duration = int(latest.get("question_duration", room.config.question_duration))
+        room.config.answer_duration = int(latest.get("answer_duration", room.config.answer_duration))
+        room.config.vote_duration = int(latest.get("vote_duration", room.config.vote_duration))
+        room.config.reveal_delay = int(latest.get("reveal_delay", room.config.reveal_delay))
 
     def _resolve_duration(self, default_seconds: int, env_key: str) -> int:
         """解析测试环境的阶段时长覆盖配置。"""
@@ -217,6 +226,8 @@ class GameManager:
             fallback=room.total_rounds,
         )
         room.config.rounds_per_game = room.total_rounds
+        # 开始前同步系统配置中的阶段时长，避免房间创建后改配置不生效。
+        await self._sync_room_time_config(room)
     
         # 更新房间状态为 SETUP
         room.phase = "setup"
