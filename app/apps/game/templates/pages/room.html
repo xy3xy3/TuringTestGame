@@ -37,7 +37,9 @@
 
     <!-- 玩家列表 -->
     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6">
-      <h2 class="text-xl font-semibold text-white mb-4">玩家列表 ({{ players|length }}/{{ room.config.max_players }})</h2>
+      <h2 class="text-xl font-semibold text-white mb-4">
+        玩家列表 (<span id="player-count">{{ players|length }}</span>/{{ room.config.max_players }})
+      </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="player-list">
         {% for p in players %}
         <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
@@ -170,15 +172,21 @@ document.addEventListener('DOMContentLoaded', () => {
   window.updateReadyButtonState = function() {
     const readyBtn = document.getElementById('ready-btn');
     const startBtn = document.getElementById('start-btn');
+    const playerCountEl = document.getElementById('player-count');
     const currentPlayerId = getCurrentPlayerId();
 
-    if (!currentPlayerId) return;
+    if (!currentPlayerId && !playerCountEl) return;
 
     // 通过 fetch 获取房间状态
     fetch(`/game/api/${roomId}/state`)
       .then(res => res.json())
       .then(data => {
         if (data.success && data.players) {
+          // 同步顶部玩家数量展示，避免仅刷新卡片时顶部人数不更新。
+          if (playerCountEl) {
+            playerCountEl.textContent = String(data.players.length);
+          }
+
           // 注意：API 返回的 id 是字符串，Cookie 中的 player_id 也是字符串
           const currentPlayer = data.players.find(p => p.id === currentPlayerId);
           if (currentPlayer && readyBtn) {

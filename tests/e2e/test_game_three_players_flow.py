@@ -111,6 +111,8 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         # 2.1) 玩家离开再加入（验证 room.html SSE 列表刷新 + join/leave 流程）
         expect(owner.locator("#player-list > div")).to_have_count(3, timeout=10_000)
         expect(p2.locator("#player-list > div")).to_have_count(3, timeout=10_000)
+        expect(owner.locator("#player-count")).to_have_text("3", timeout=10_000)
+        expect(p2.locator("#player-count")).to_have_text("3", timeout=10_000)
 
         p3.once("dialog", lambda dialog: dialog.accept())
         p3.get_by_role("button", name="离开").click()
@@ -118,6 +120,8 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
 
         expect(owner.locator("#player-list > div")).to_have_count(2, timeout=10_000)
         expect(p2.locator("#player-list > div")).to_have_count(2, timeout=10_000)
+        expect(owner.locator("#player-count")).to_have_text("2", timeout=10_000)
+        expect(p2.locator("#player-count")).to_have_text("2", timeout=10_000)
 
         p3.locator('#join-form input[name="room_code"]').fill(room_code)
         p3.locator('#join-form input[name="nickname"]').fill("P3")
@@ -127,6 +131,8 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
 
         expect(owner.locator("#player-list > div")).to_have_count(3, timeout=10_000)
         expect(p2.locator("#player-list > div")).to_have_count(3, timeout=10_000)
+        expect(owner.locator("#player-count")).to_have_text("3", timeout=10_000)
+        expect(p2.locator("#player-count")).to_have_text("3", timeout=10_000)
 
         # 3) 三人都准备
         _click_ready(p2)
