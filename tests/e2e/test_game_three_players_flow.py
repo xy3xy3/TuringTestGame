@@ -239,6 +239,19 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         # 被测者页不应出现投票按钮
         expect(subject_page.locator("#vote-area")).to_be_hidden()
 
+        # 9.2) 投票结算反馈：显示“猜对/猜错”与本轮分值影响
+        expect(voter_pages[0].locator("#round-feedback-card")).to_be_visible(timeout=20_000)
+        expect(voter_pages[0].locator("#round-feedback-card")).to_contain_text("你本轮猜对了")
+        expect(voter_pages[0].locator("#round-feedback-card")).to_contain_text("本轮得分变化：+50 分")
+
+        expect(voter_pages[1].locator("#round-feedback-card")).to_be_visible(timeout=20_000)
+        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("你本轮猜错了")
+        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("本轮得分变化：-30 分")
+
+        expect(subject_page.locator("#round-feedback-card")).to_be_visible(timeout=20_000)
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("你本轮作为被测者")
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("本轮得分变化：+100 分")
+
         # 10) 游戏结束并跳转到结果页
         #
         # 说明：

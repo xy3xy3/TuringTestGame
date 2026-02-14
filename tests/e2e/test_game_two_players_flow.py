@@ -163,6 +163,15 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         # 选择“真人”（猜错），让被测者获得“欺骗分”，便于断言排行榜与分数
         _vote(interrogator_page, "真人")
 
+        # 8.1) 投票结算反馈：显示“猜对/猜错”与本轮分值影响
+        expect(interrogator_page.locator("#round-feedback-card")).to_be_visible(timeout=20_000)
+        expect(interrogator_page.locator("#round-feedback-card")).to_contain_text("你本轮猜错了")
+        expect(interrogator_page.locator("#round-feedback-card")).to_contain_text("本轮得分变化：-30 分")
+
+        expect(subject_page.locator("#round-feedback-card")).to_be_visible(timeout=20_000)
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("你本轮作为被测者")
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("本轮得分变化：+300 分")
+
         # 9) 结算页
         for page in [owner, p2]:
             page.wait_for_url(f"**/game/{room_id}/result?data=*", timeout=40_000)

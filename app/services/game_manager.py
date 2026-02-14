@@ -583,11 +583,20 @@ class GameManager:
 
         # 统计投票结果
         vote_stats = {"human": 0, "ai": 0, "skip": 0}
+        vote_details: list[dict[str, Any]] = []
         for vote in votes:
             vote_stats[vote.vote] += 1
             # 判断是否正确
             vote.is_correct = (vote.vote == game_round.answer_type)
             await vote.save()
+            vote_details.append(
+                {
+                    "voter_id": vote.voter_id,
+                    "vote": vote.vote,
+                    "is_correct": bool(vote.is_correct),
+                    "score_delta": scores.get(vote.voter_id, 0),
+                }
+            )
 
         # 通知结果
         # 构建玩家得分信息（包含昵称）
@@ -601,11 +610,13 @@ class GameManager:
         ]
         await sse_manager.publish(room_id, "round_result", {
             "round_number": game_round.round_number,
+            "subject_id": game_round.subject_id,
             "subject_choice": game_round.answer_type,
             "question": game_round.question,
             "answer": game_round.answer,
             "votes": vote_stats,
             "scores": scores,
+            "vote_details": vote_details,
             "player_scores": player_scores_list,
         })
 
