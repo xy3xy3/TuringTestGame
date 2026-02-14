@@ -1,39 +1,71 @@
-# PyFastAdmin
+# TuringTestGame
 
-HTMX + Alpine.js + Tailwind + FastAPI + Jinja2 + Beanie 的不分离管理后台示例。
+一个不分离的后台管理系统 + 图灵测试小游戏示例项目。
 
-## 功能
-- RBAC 权限管理（增删改查）
-- 权限树配置（按页面 URL/名称聚合）
-- 管理员管理（创建/编辑/禁用）
-- 登录、个人资料、修改密码场景页面
-- 系统配置（示例：SMTP）
-- 移动端/桌面端响应式布局
-- 所有静态资源本地化（HTMX/Alpine/Tailwind 编译产物均为本地）
+技术栈：FastAPI + Jinja2 + HTMX + Alpine.js + Tailwind + MongoDB(Beanie)。
 
-## 目录结构
-- `app/`：FastAPI 应用与模板
-- `app/static/`：本地静态资源
-- `deploy/dev/`：仅数据库的开发环境
-- `deploy/product/`：生产环境 Dockerfile（uv 安装依赖）
-- `refs/`：外部仓库参考（已 gitignore）
+## 主要功能
 
-## 本地运行
-1. 准备 MongoDB（开发环境）
+后台（`/admin`）
+- RBAC 角色权限（菜单、页面、按钮与接口强校验）
+- AI 模型配置（用于游戏里的 AI 代答）
+- 系统配置、操作日志、备份（示例模块）
+
+前台游戏（`/game`）
+- 创建/加入房间（邀请码邀请）
+- 灵魂注入：为你的 AI 角色设置系统提示词与模型
+- SSE 实时同步房间与对局状态（准备状态、回合推进、倒计时等）
+
+## 游戏规则（图灵测试）
+
+基本概念
+- 参与者：每局有多名玩家。
+- 角色：每一轮会随机选出
+  - 提问者（Interrogator）：提出问题
+  - 被测者（Subject）：选择“真人回答”或“AI 代答”
+  - 陪审团（Jury）：除被测者外的其他玩家，用于投票判断回答来自真人还是 AI
+
+流程
+1. 房间大厅（`waiting`）：玩家加入并点击“准备”
+2. 灵魂注入（`setup`）：每位玩家配置自己的 AI 角色（系统提示词 + 模型）
+3. 对局进行（`playing`）：每轮包含提问 -> 回答 -> 投票 -> 揭晓
+4. 结算（`finished`）：展示排行榜与成就
+
+得分规则（以当前实现为准）
+- 陪审团（投票者）
+  - 猜对回答类型：`+50`
+  - 猜错回答类型：`-30`
+  - 选择跳过：`0`
+- 被测者（回答者）
+  - 仅当选择“AI 代答”时计算欺骗分：每骗过 1 人（对方投“真人”）`+100`
+  - 完美伪装奖励：若所有非跳过投票都选择“真人”，额外 `+200`
+
+说明
+- 默认回合数为 4（可在代码/配置里调整）。
+- 若未配置任何可用 AI 模型，“AI 代答”会失败（测试环境有固定回复兜底，见下文）。
+
+## 本地运行（开发）
+
+前置要求
+- Docker / Docker Compose（用于本地 MongoDB）
+- Node + pnpm
+- Python 3.13 + uv
+
+1) 启动 MongoDB（开发环境）
 
 ```bash
 cd deploy/dev
 docker compose --env-file ../../.env up -d
 ```
 
-2. 安装前端依赖并构建 Tailwind
+2) 安装前端依赖并构建 Tailwind
 
 ```bash
 pnpm install
 pnpm build:css
 ```
 
-3. 使用 uv 创建虚拟环境并同步依赖（Python 3.13）
+3) 初始化 Python 依赖
 
 ```bash
 uv venv -p 3.13
@@ -41,157 +73,75 @@ source .venv/bin/activate
 uv sync
 ```
 
-4. 启动服务
+4) 启动服务
 
 ```bash
 uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 ```
 
-访问：http://localhost:8000/admin/rbac
-- 权限树配置：http://localhost:8000/admin/rbac/permissions
-- 管理员管理：http://localhost:8000/admin/users
-- 个人资料：http://localhost:8000/admin/profile
-- 修改密码：http://localhost:8000/admin/password
-- 系统配置：http://localhost:8000/admin/config
+访问入口
+- 游戏首页：`http://localhost:8000/game`
+- 管理后台：`http://localhost:8000/admin/login`
 
 首次启动会自动创建默认管理员（用户名/密码来自 `.env` 的 `ADMIN_USER`、`ADMIN_PASS`）。
 
+## AI 模型配置（用于“AI 代答”）
+
+项目使用 OpenAI 兼容接口进行调用（见 `app/services/ai_chat_service.py`）。
+
+配置步骤
+1. 登录后台：`/admin/login`
+2. 进入 AI 模型配置：`/admin/ai_models`
+3. 新建模型并填写：
+   - `名称`：展示用
+   - `Base URL`：OpenAI 兼容地址（例如 OpenAI 官方或自建网关）
+   - `API Key`：访问令牌
+   - `模型名`：例如 `gpt-4o-mini`（按你的服务实际支持填写）
+   - `Temperature / Max Tokens`
+4. 确保至少有 1 个模型 `启用`，并建议设置 1 个 `默认`
+
+没有可用模型时
+- 生产/开发环境：会返回“没有可用的 AI 模型”
+- 测试环境（`APP_ENV=test`）：会使用固定回复 `TEST_FAKE_AI_REPLY` 作为兜底，保证 E2E 可稳定运行
 
 ## 测试（单元 / 集成 / E2E）
 
-> 测试会使用 **独立 MongoDB 数据库**，不污染主库。
-
-1. 默认会自动加载项目 `.env`（无需手动 `export`）
-
-测试优先读取：`TEST_MONGO_URL / TEST_MONGO_DB / TEST_E2E_MONGO_DB`，未设置时回退到 `.env` 的 `MONGO_URL`。
-如需临时覆盖，可在命令前追加环境变量：
-
+单元测试（纯逻辑）
 ```bash
-TEST_MONGO_URL=mongodb://localhost:27117 TEST_MONGO_DB=pyfastadmin_test uv run pytest -m integration
-```
-
-2. 安装测试依赖（已通过 `uv add --dev` 管理）
-
-```bash
-uv sync
-```
-
-3. 运行测试
-
-```bash
-# 单元测试（纯逻辑）
 uv run pytest -m unit
+```
 
-# 集成测试（需要 MongoDB）
-uv run pytest -m integration
+语法检查
+```bash
+uv run python -m compileall app tests scripts
+```
 
-# 端到端（Playwright）
+E2E（Playwright）
+```bash
 uv run playwright install chromium
 uv run pytest -m e2e
 ```
 
-说明：
-- `tests/unit/`：不依赖数据库
-- `tests/integration/`：自动清理 `TEST_MONGO_DB`
-- `tests/e2e/`：启动独立服务并使用 `TEST_E2E_MONGO_DB`
+说明
+- E2E 会启动独立服务并使用独立 MongoDB 数据库（见 `tests/e2e/conftest.py`）
+- 游戏 E2E：
+  - 二人局：`tests/e2e/test_game_two_players_flow.py`
+  - 三人局：`tests/e2e/test_game_three_players_flow.py`
+- E2E 默认会在测试环境缩短各阶段时长，并固定 AI 回复，确保用例稳定不依赖外部服务。
 
-## 生产部署（含 uv Dockerfile）
+## 生产部署（Docker Compose）
 
 ```bash
 cd deploy/product
 docker compose --env-file ../../.env up -d --build
 ```
 
-## 环境变量
-参考 `.env.example`，重点变量：
-- `APP_PORT`：应用端口
-- `MONGO_URL`：MongoDB 连接串
-- `MONGO_DB`：数据库名称
-- `MONGO_PORT`：MongoDB 容器映射端口
-- `SECRET_KEY`：Session 加密密钥
-- `ADMIN_USER`：默认管理员账号
-- `ADMIN_PASS`：默认管理员密码
+部署要点
+- 正确配置 `MONGO_URL/MONGO_DB/SECRET_KEY`
+- 配置后台 AI 模型（否则“AI 代答”不可用）
+- 邀请链接依赖站点 `Base URL`（后台配置项，用于生成可分享链接）
 
-备份云存储测试变量（用于 E2E/测试直连云端）：
-- `TEST_BACKUP_USE_ENV`：开发环境是否强制启用 `TEST_BACKUP_*` 覆盖（`1/true` 生效）
-- `TEST_BACKUP_CLOUD_ENABLED`：是否启用云端备份
-- `TEST_BACKUP_CLOUD_PROVIDERS`：云厂商列表，逗号分隔（如 `aliyun_oss,tencent_cos`）
-- `TEST_BACKUP_CLOUD_PATH`：云端备份前缀
-- `TEST_BACKUP_OSS_*` / `TEST_BACKUP_COS_*`：OSS/COS 凭证与桶配置
+## License
 
-## 依赖管理（uv）
-- 新增依赖：`uv add 包名`
-- 同步依赖：`uv sync`
+本项目使用 GNU GPLv3 许可证，见 `LICENSE`。
 
-## 二开与迁移
-
-本章节面向业务开发者，重点讲“怎么从示例项目快速落地自己的模块”。
-
-### 1) 一键生成模块骨架（推荐起手）
-
-```bash
-# 先预览将生成哪些文件
-uv run python scripts/generate_admin_module.py inventory --name "库存管理" --group system --dry-run
-
-# 确认后生成
-uv run python scripts/generate_admin_module.py inventory --name "库存管理" --group system
-```
-
-可选参数：
-- `module`：模块标识，必须匹配 `^[a-z][a-z0-9_]{1,31}$`
-- `--name`：模块中文名（默认同 module）
-- `--group`：菜单分组 key（默认 `system`）
-- `--url`：资源 URL（默认 `/admin/<module>`）
-- `--force`：覆盖已有文件
-- `--dry-run`：仅打印不落盘
-
-### 2) 脚手架会生成什么
-- `app/apps/admin/controllers/<module>.py`
-- `app/models/<module>.py`
-- `app/services/<module>_service.py`
-- `app/apps/admin/templates/pages/<module>.html`
-- `app/apps/admin/templates/partials/<module>_table.html`
-- `app/apps/admin/templates/partials/<module>_form.html`
-- `tests/unit/test_<module>_scaffold.py`
-- `app/apps/admin/registry_generated/<module>.json`
-- 自动更新 `app/models/__init__.py` 与 `app/db.py`，完成模型注册
-
-### 3) 生成后你还需要手动做什么（必须）
-1. 在 `app/main.py` 引入并注册新控制器路由（`app.include_router(...)`）。
-2. 按业务调整模型字段/索引和服务层读写逻辑（脚手架提供的是通用 CRUD 起点）。
-3. 按业务补齐表单字段、筛选、分页和错误提示。
-4. 保持按钮权限与后端权限一致（只隐藏按钮不算完成）。
-5. 补充操作日志（至少 create/read/update/delete）。
-6. 做移动端和桌面端检查（尤其表格横向滚动）。
-
-### 4) RBAC 显式权限声明（强烈建议）
-- 推荐在路由上使用：
-  - `@permission_decorator.permission_meta("resource", "action")`
-- 自动推断仍可用，但只作为兜底。
-- 批量操作、导入导出、非标准路径务必显式声明，降低误判风险。
-
-### 5) 角色权限导入导出（JSON）
-- 页面入口：`/admin/rbac` 顶部按钮（导出 JSON / 导入 JSON）
-- 导出接口：`GET /admin/rbac/roles/export?include_system=1`
-- 导入接口：`POST /admin/rbac/roles/import`
-
-典型迁移流程：
-1. 在示例环境导出角色权限 JSON。
-2. 在业务环境进入 RBAC 页面导入 JSON。
-3. 检查导入 summary（新增/更新/跳过）与操作日志。
-4. 用导入后的角色账号实际登录验证菜单和按钮权限。
-
-### 6) 推荐验收命令
-
-```bash
-# 基础回归
-uv run pytest -m unit
-uv run python -m compileall app tests scripts
-
-# 若改了导入导出/权限映射，建议追加
-uv run pytest tests/integration/test_rbac_role_transfer.py -m integration
-```
-
-### 7) 更多二开细则
-- AI 协作规范：`AGENTS.md`
-- 8 步落地清单：`docs/SECONDARY_DEVELOPMENT_GUIDE.md`

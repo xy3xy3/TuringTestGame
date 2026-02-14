@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "HTMX + Alpine + Tailwind + FastAPI + Jinja2 + Beanie 管理后台"
 readme = "README.md"
 requires-python = ">=3.13"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-only" }
 authors = [{ name = "Your Name" }]
 
 dependencies = [

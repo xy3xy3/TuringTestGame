@@ -1,6 +1,7 @@
 {
   "name": "TuringTestGame",
   "private": true,
+  "license": "GPL-3.0-only",
   "scripts": {
     "dev:css": "tailwindcss -i app/static/css/tailwind.css -o app/static/css/app.css --watch",
     "build:css": "tailwindcss -i app/static/css/tailwind.css -o app/static/css/app.css --minify"
