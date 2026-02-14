@@ -65,6 +65,36 @@ def _redirect_by_phase(room_id: str, phase: str) -> RedirectResponse | None:
     return None
 
 
+async def _list_waiting_room_rows() -> list[dict[str, Any]]:
+    """查询前台可加入的房间列表（等待中），包含密码标记与人数信息。"""
+    rooms = await GameRoom.find({"phase": "waiting"}).sort("-created_at").to_list()
+    if not rooms:
+        return []
+
+    room_codes = [room.room_id for room in rooms]
+    players = await GamePlayer.find({"room_id": {"$in": room_codes}}).to_list()
+    player_count_map: dict[str, int] = {}
+    for player in players:
+        player_count_map[player.room_id] = player_count_map.get(player.room_id, 0) + 1
+
+    rows: list[dict[str, Any]] = []
+    for room in rooms:
+        player_count = player_count_map.get(room.room_id, 0)
+        max_players = room.config.max_players
+        rows.append(
+            {
+                "room_id": str(room.id),
+                "room_code": room.room_id,
+                "has_password": bool(room.password),
+                "phase": room.phase,
+                "player_count": player_count,
+                "max_players": max_players,
+                "can_join": player_count < max_players,
+            }
+        )
+    return rows
+
+
 @router.get("", response_class=HTMLResponse)
 async def game_index(request: Request) -> HTMLResponse:
     """游戏首页。"""
@@ -78,6 +108,32 @@ async def game_index(request: Request) -> HTMLResponse:
             "request": request,
             "invite_room_code": room_code,
             "invite_password": password,
+        },
+    )
+
+
+@router.get("/rooms", response_class=HTMLResponse)
+async def game_rooms_page(request: Request) -> HTMLResponse:
+    """房间列表页（前台）。"""
+    rooms = await _list_waiting_room_rows()
+    return templates.TemplateResponse(
+        "pages/rooms.html",
+        {
+            "request": request,
+            "rooms": rooms,
+        },
+    )
+
+
+@router.get("/rooms/table", response_class=HTMLResponse)
+async def game_rooms_table(request: Request) -> HTMLResponse:
+    """房间列表 partial。"""
+    rooms = await _list_waiting_room_rows()
+    return templates.TemplateResponse(
+        "partials/room_cards.html",
+        {
+            "request": request,
+            "rooms": rooms,
         },
     )
 

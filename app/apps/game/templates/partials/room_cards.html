@@ -1,0 +1,50 @@
+<div id="room-cards-wrap">
+  {% if rooms %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% for room in rooms %}
+        <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md" data-room-card data-room-code="{{ room.room_code }}">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm text-purple-200">房间号</p>
+              <p class="text-xl font-bold text-white font-mono">{{ room.room_code }}</p>
+            </div>
+            <div>
+              {% if room.has_password %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200">
+                  <i class="fa-solid fa-lock"></i>有密码
+                </span>
+              {% else %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-green-300/50 bg-green-500/10 px-2 py-1 text-xs text-green-200">
+                  <i class="fa-solid fa-lock-open"></i>公开
+                </span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between text-sm text-purple-200">
+            <p>玩家：<span class="text-white">{{ room.player_count }}/{{ room.max_players }}</span></p>
+            <p>状态：<span class="text-white">等待中</span></p>
+          </div>
+
+          <div class="mt-4">
+            <button
+              type="button"
+              class="btn-primary w-full {% if not room.can_join %}opacity-50 cursor-not-allowed{% endif %}"
+              {% if not room.can_join %}disabled{% endif %}
+              data-join-room="{{ room.room_code }}"
+              x-on:click="openJoin('{{ room.room_code }}', {{ room.has_password | tojson }}, {{ room.can_join | tojson }})"
+            >
+              {% if room.can_join %}加入房间{% else %}房间已满{% endif %}
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="rounded-2xl border border-dashed border-white/20 bg-white/5 p-10 text-center">
+      <p class="text-xl font-semibold text-white">暂无可加入房间</p>
+      <p class="text-sm text-purple-200 mt-2">你可以先去首页创建房间，再邀请朋友加入。</p>
+      <a href="/game" class="btn-primary inline-flex mt-4">去创建房间</a>
+    </div>
+  {% endif %}
+</div>

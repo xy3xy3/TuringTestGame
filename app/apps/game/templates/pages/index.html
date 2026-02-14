@@ -4,8 +4,8 @@
 
 {% block content %}
 <div
-  class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-  <div class="max-w-md w-full">
+  class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-6 lg:p-8">
+  <div class="mx-auto w-full" style="max-width: 1120px;">
     <!-- Logo 和标题 -->
     <div class="text-center mb-8">
       <div
@@ -16,51 +16,58 @@
       <p class="text-purple-200">你是人还是 AI？一起来挑战吧！</p>
     </div>
 
-    <!-- 创建房间 -->
-    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6">
-      <h2 class="text-xl font-semibold text-white mb-4">创建房间</h2>
-      <form id="create-form" hx-post="/game/create" hx-target="#create-result" hx-swap="innerHTML">
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- 创建房间 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
+        <h2 class="text-xl font-semibold text-white mb-4">创建房间</h2>
+        <form id="create-form" hx-post="/game/create" hx-target="#create-result" hx-swap="innerHTML">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
+              <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
+            </div>
+            <div>
+              <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
+              <input type="text" name="password" class="input w-full" placeholder="留空则不设密码" />
+            </div>
+            <button type="submit" class="btn-primary w-full">创建房间</button>
           </div>
-          <div>
-            <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-            <input type="text" name="password" class="input w-full" placeholder="留空则不设密码" />
-          </div>
-          <button type="submit" class="btn-primary w-full">创建房间</button>
-        </div>
-      </form>
-      <div id="create-result" class="mt-4"></div>
-    </div>
+        </form>
+        <div id="create-result" class="mt-4"></div>
+      </div>
 
-    <!-- 加入房间 -->
-    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
-      <h2 class="text-xl font-semibold text-white mb-4">加入房间</h2>
-      <form id="join-form" hx-post="/game/join" hx-target="#join-result" hx-swap="innerHTML">
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm text-purple-200 mb-1">房间号</label>
-            <input type="text" id="join-room-code" name="room_code" class="input w-full" placeholder="输入房间号" required />
-          </div>
-          <div>
-            <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-            <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
-          </div>
-          <div>
-            <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-            <input type="text" id="join-password" name="password" class="input w-full" placeholder="如果房间有密码" />
-          </div>
-          <button type="submit"
-            class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
+      <!-- 加入房间 -->
+      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h2 class="text-xl font-semibold text-white">加入房间</h2>
+          <a href="/game/rooms" class="text-sm text-purple-200 hover:text-white">
+            <i class="fa-solid fa-list mr-1"></i>浏览房间列表
+          </a>
         </div>
-      </form>
-      <div id="join-result" class="mt-4"></div>
+        <form id="join-form" hx-post="/game/join" hx-target="#join-result" hx-swap="innerHTML">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-purple-200 mb-1">房间号</label>
+              <input type="text" id="join-room-code" name="room_code" class="input w-full" placeholder="输入房间号" required />
+            </div>
+            <div>
+              <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
+              <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
+            </div>
+            <div>
+              <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
+              <input type="text" id="join-password" name="password" class="input w-full" placeholder="如果房间有密码" />
+            </div>
+            <button type="submit"
+              class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
+          </div>
+        </form>
+        <div id="join-result" class="mt-4"></div>
+      </div>
     </div>
 
     <!-- 游戏说明 -->
-    <div class="mt-8 text-center text-purple-300 text-sm">
+    <div class="mt-8 text-center text-purple-300 text-sm max-w-2xl mx-auto">
       <p>游戏规则：</p>
       <ul class="mt-2 space-y-1 text-left max-w-xs mx-auto">
         <li>• 每位玩家设置自己的 AI 角色</li>

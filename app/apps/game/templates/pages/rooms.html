@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}房间列表 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-6 lg:p-8" x-data='{
+  nickname: "",
+  roomCode: "",
+  roomLocked: false,
+  canJoin: false,
+  password: "",
+  showJoinModal: false,
+  joinError: "",
+  openJoin(code, locked, joinable) {
+    const name = (this.nickname || "").trim();
+    if (!name) {
+      alert("请填写昵称");
+      this.$nextTick(() => this.$refs.nicknameInput && this.$refs.nicknameInput.focus());
+      return;
+    }
+    if (name.length < 2) {
+      alert("昵称至少需要2个字符");
+      this.$nextTick(() => this.$refs.nicknameInput && this.$refs.nicknameInput.focus());
+      return;
+    }
+
+    this.roomCode = code;
+    this.roomLocked = locked;
+    this.canJoin = joinable;
+    this.password = "";
+    this.joinError = "";
+    if (!joinable) {
+      this.joinError = "该房间人数已满，无法加入";
+      return;
+    }
+    this.showJoinModal = true;
+    this.$nextTick(() => {
+      if (this.roomLocked && this.$refs.roomPasswordInput) {
+        this.$refs.roomPasswordInput.focus();
+      }
+    });
+  },
+  submitJoin() {
+    const name = (this.nickname || "").trim();
+    if (name.length < 2) {
+      this.joinError = "昵称至少需要2个字符";
+      return;
+    }
+    if (this.roomLocked && !(this.password || "").trim()) {
+      this.joinError = "该房间已加锁，请输入房间密码";
+      return;
+    }
+    this.joinError = "";
+    document.getElementById("rooms-join-form").requestSubmit();
+  }
+}'>
+  <div class="mx-auto w-full" style="max-width: 1120px;">
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-5 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-white">房间列表</h1>
+          <p class="text-purple-200 text-sm mt-1">展示所有等待中的房间（含有密码房间）</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="/game" class="btn-secondary">返回首页</a>
+          <button
+            class="btn-secondary"
+            hx-get="/game/rooms/table"
+            hx-target="#room-cards-wrap"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+          >
+            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm text-purple-200 mb-1">你的昵称（加入房间时使用）</label>
+        <input
+          type="text"
+          x-model="nickname"
+          x-ref="nicknameInput"
+          class="input w-full md:w-96"
+          placeholder="输入昵称"
+          minlength="2"
+          maxlength="32"
+          required
+        />
+      </div>
+    </div>
+
+    <section>
+      {% include "partials/room_cards.html" %}
+    </section>
+    <div id="rooms-join-result" class="mt-3"></div>
+  </div>
+
+  <div
+    class="fixed inset-0 z-50 p-4"
+    x-show="showJoinModal"
+    x-cloak
+    x-on:click.self="showJoinModal = false"
+  >
+    <div
+      class="mx-auto mt-16 max-w-md rounded-2xl border p-5 shadow-xl"
+      style="background-color: rgb(52 35 98); border-color: rgba(196, 181, 253, 0.42); box-shadow: 0 20px 48px rgba(15, 23, 42, 0.52);"
+    >
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">加入房间 <span class="font-mono" x-text="roomCode"></span></h2>
+        <button class="text-purple-200 hover:text-white" x-on:click="showJoinModal = false">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="rooms-join-form" class="mt-4 space-y-4" hx-post="/game/join" hx-target="#rooms-join-result" hx-swap="innerHTML">
+        <input type="hidden" name="room_code" :value="roomCode" />
+        <input type="hidden" name="nickname" :value="nickname" />
+        <input type="hidden" name="password" :value="password" />
+
+        <div
+          class="rounded-lg border p-3 text-sm"
+          style="background-color: rgb(73 49 136); border-color: rgba(221, 214, 254, 0.26);"
+        >
+          <p class="text-purple-100">昵称：<span class="text-white" x-text="nickname || '未填写'"></span></p>
+          <p class="text-purple-100 mt-1">
+            状态：
+            <span x-show="roomLocked" class="text-amber-300"><i class="fa-solid fa-lock mr-1"></i>已加锁</span>
+            <span x-show="!roomLocked" class="text-green-300"><i class="fa-solid fa-lock-open mr-1"></i>公开房间</span>
+          </p>
+        </div>
+
+        <div x-show="roomLocked" x-cloak>
+          <label class="block text-sm text-purple-200 mb-1">房间密码</label>
+          <input
+            type="text"
+            x-model="password"
+            x-ref="roomPasswordInput"
+            class="input w-full"
+            placeholder="请输入房间密码"
+          />
+        </div>
+
+        <p class="text-sm text-red-300" x-show="joinError" x-text="joinError"></p>
+
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" class="btn-secondary" x-on:click="showJoinModal = false">取消</button>
+          <button type="button" class="btn-primary" x-on:click="submitJoin()">加入房间</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
