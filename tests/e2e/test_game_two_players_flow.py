@@ -160,7 +160,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         # 被测者不能投票
         expect(subject_page.locator("#vote-area")).to_be_hidden()
 
-        # 选择“真人”（猜错），让被测者获得“欺骗分”，便于断言排行榜与分数
+        # 选择“真人”（猜错），新规则下仅提问者扣分
         _vote(interrogator_page, "真人")
 
         # 8.1) 投票结算反馈：显示“猜对/猜错”与本轮分值影响
@@ -170,7 +170,8 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
 
         expect(subject_page.locator("#round-feedback-card")).to_be_visible(timeout=20_000)
         expect(subject_page.locator("#round-feedback-card")).to_contain_text("你本轮作为被测者")
-        expect(subject_page.locator("#round-feedback-card")).to_contain_text("本轮得分变化：+300 分")
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("本轮不参与计分")
+        expect(subject_page.locator("#round-feedback-card")).to_contain_text("本轮得分变化：0 分")
 
         # 9) 结算页
         for page in [owner, p2]:
@@ -179,8 +180,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
             expect(page.locator("#leaderboard > div")).to_have_count(2, timeout=20_000)
 
         # 10) 校验结算数据
-        # 两人局：被测者 AI 回答且骗过 1 人 +100，并触发“完美伪装”额外 +200，总计 300；
-        # 提问者猜错 -30。
+        # 两人局新规则：仅提问者计分；提问者猜错 -30，被测者 0 分。
         parsed = urlparse(owner.url)
         data_param = parse_qs(parsed.query).get("data", [])
         assert data_param
@@ -189,7 +189,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         assert len(leaderboard) == 2
 
         expected_scores = {
-            subject_name: 300,
+            subject_name: 0,
             interrogator_name: -30,
         }
         for entry in leaderboard:

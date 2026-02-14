@@ -732,6 +732,7 @@ class GameManager:
         ]
         await sse_manager.publish(room_id, "round_result", {
             "round_number": game_round.round_number,
+            "interrogator_id": game_round.interrogator_id,
             "subject_id": game_round.subject_id,
             "subject_choice": game_round.answer_type,
             "question": game_round.question,
@@ -754,31 +755,20 @@ class GameManager:
 
     def _calculate_scores(self, game_round: GameRound, votes: list[VoteRecord]) -> dict[str, int]:
         """计算本回合得分。"""
-        scores = {}
-        subject_id = game_round.subject_id
+        scores: dict[str, int] = {}
 
-        # 计算陪审团得分
-        for vote in votes:
-            if vote.vote == "skip":
-                continue
+        # 新规则：仅提问者计分。被测者与其它投票者的得分恒为 0。
+        interrogator_vote = next(
+            (vote for vote in votes if vote.voter_id == game_round.interrogator_id),
+            None,
+        )
+        if not interrogator_vote or interrogator_vote.vote == "skip":
+            return scores
 
-            is_correct = (vote.vote == game_round.answer_type)
-            if is_correct:
-                scores[vote.voter_id] = scores.get(vote.voter_id, 0) + 50
-            else:
-                scores[vote.voter_id] = scores.get(vote.voter_id, 0) - 30
-
-        # 计算被测者得分（只有使用了 AI 才计算欺骗分）
-        if game_round.answer_type == "ai":
-            wrong_votes = sum(1 for v in votes if v.vote == "human")
-            # 每骗一个人 +100 分
-            scores[subject_id] = scores.get(subject_id, 0) + wrong_votes * 100
-
-            # 完美伪装奖励：如果所有人都猜错了（不算skip）
-            non_skip_votes = [v for v in votes if v.vote != "skip"]
-            if non_skip_votes and all(v.vote == "human" for v in non_skip_votes):
-                scores[subject_id] = scores.get(subject_id, 0) + 200
-
+        if interrogator_vote.vote == game_round.answer_type:
+            scores[game_round.interrogator_id] = 50
+        else:
+            scores[game_round.interrogator_id] = -30
         return scores
 
     async def _next_round(self, room_id: str):

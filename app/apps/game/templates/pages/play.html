@@ -166,7 +166,7 @@
     <div class="space-y-4 text-gray-300 text-sm max-h-[60vh] overflow-y-auto">
       <div>
         <h4 class="text-white font-semibold mb-2 flex items-center">
-          <i class="fa-solid fa-gavel text-blue-400 mr-2"></i>陪审团（投票者）
+          <i class="fa-solid fa-question text-blue-400 mr-2"></i>提问者（唯一计分）
         </h4>
         <ul class="space-y-1 ml-6 list-disc">
           <li>猜对回答类型：<span class="text-green-400 font-bold">+50分</span></li>
@@ -176,16 +176,15 @@
       </div>
       <div>
         <h4 class="text-white font-semibold mb-2 flex items-center">
-          <i class="fa-solid fa-user-secret text-pink-400 mr-2"></i>被测者（回答者）
+          <i class="fa-solid fa-users text-pink-400 mr-2"></i>被测者与陪审团
         </h4>
         <ul class="space-y-1 ml-6 list-disc">
-          <li>使用AI回答并骗过1人：<span class="text-green-400 font-bold">+100分/人</span></li>
-          <li>完美伪装（所有人猜错）：<span class="text-green-400 font-bold">额外+200分</span></li>
-          <li>使用真人回答：无额外得分</li>
+          <li>本轮不参与加减分：<span class="text-gray-300 font-bold">固定 0 分</span></li>
+          <li>仍可正常参与回答/投票流程，用于推进游戏</li>
         </ul>
       </div>
       <div class="bg-white/5 rounded-lg p-3 text-xs text-gray-400">
-        <p><i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>小贴士：作为被测者，使用AI回答并成功欺骗更多玩家可以获得更高分数！</p>
+        <p><i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>小贴士：每轮只给提问者结算分数，减少角色随机带来的分差。</p>
       </div>
     </div>
   </div>
@@ -475,14 +474,12 @@ function renderRoundFeedback(result) {
     score.classList.add('text-purple-300');
   }
 
-  if (playerId === String(result.subject_id || '')) {
-    if (result.subject_choice === 'ai') {
-      title.textContent = '你本轮作为被测者';
-      detail.textContent = `你使用 AI 回答，依据他人投票结果结算得分。${scoreText}`;
-    } else {
-      title.textContent = '你本轮作为被测者';
-      detail.textContent = `你选择真人回答。${scoreText}`;
-    }
+  const subjectId = String(result.subject_id || '');
+  const interrogatorId = String(result.interrogator_id || '');
+
+  if (playerId === subjectId) {
+    title.textContent = '你本轮作为被测者';
+    detail.textContent = `根据当前规则，被测者本轮不参与计分。${scoreText}`;
     card.classList.remove('hidden');
     return;
   }
@@ -492,11 +489,22 @@ function renderRoundFeedback(result) {
   const voteValue = myVote ? myVote.vote : myLastVote;
   const voteLabel = voteValue === 'ai' ? 'AI' : voteValue === 'human' ? '真人' : '跳过';
 
+  if (playerId !== interrogatorId) {
+    title.textContent = '你本轮作为陪审团';
+    if (!voteValue) {
+      detail.textContent = `本轮仅提问者计分，你本轮不计分。${scoreText}`;
+    } else {
+      detail.textContent = `你的判断：${voteLabel}。本轮仅提问者计分，你本轮不计分。${scoreText}`;
+    }
+    card.classList.remove('hidden');
+    return;
+  }
+
   if (!voteValue) {
-    title.textContent = '本轮未记录你的投票';
+    title.textContent = '你本轮作为提问者';
     detail.textContent = scoreText;
   } else if (voteValue === 'skip') {
-    title.textContent = '你本轮选择了跳过';
+    title.textContent = '你本轮作为提问者';
     detail.textContent = `你的判断：${voteLabel}。${scoreText}`;
   } else {
     const isCorrect = myVote ? Boolean(myVote.is_correct) : voteValue === result.subject_choice;
