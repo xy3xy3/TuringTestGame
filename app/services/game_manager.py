@@ -309,6 +309,7 @@ class GameManager:
             "room_id": room_id,
             "round_id": str(game_round.id),
             "round_number": 1,
+            "total_rounds": room.total_rounds,
             "interrogator_id": str(interrogator.id),
             "interrogator_nickname": interrogator.nickname,
             "subject_id": str(subject.id),
@@ -804,6 +805,7 @@ class GameManager:
         await sse_manager.publish(room_id, "new_round", {
             "round_id": str(game_round.id),
             "round_number": room.current_round,
+            "total_rounds": room.total_rounds,
             "interrogator_id": str(interrogator.id),
             "interrogator_nickname": interrogator.nickname,
             "subject_id": str(subject.id),

@@ -665,6 +665,7 @@ async def get_current_round(room_id: str) -> dict[str, Any]:
         "round": {
             "id": str(current_round.id),
             "round_number": current_round.round_number,
+            "total_rounds": room.total_rounds,
             "status": current_round.status,
             "question": current_round.question,
             "answer": current_round.answer,

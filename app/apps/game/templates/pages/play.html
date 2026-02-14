@@ -9,7 +9,7 @@
     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-4">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-xl font-bold text-white">第 <span id="round-number">{{ current_round }}</span> 轮</h1>
+          <h1 class="text-xl font-bold text-white">第 <span id="round-number">{{ current_round }}</span>/<span id="total-rounds">{{ room.total_rounds }}</span> 回合</h1>
           <p class="text-purple-200 text-sm">房间号：{{ room.room_id }}</p>
         </div>
         <div class="text-right">
@@ -195,6 +195,7 @@
 const roomId = '{{ room.id }}';
 const playerId = '{{ player_id }}';
 let currentRound = {{ current_round }};
+let totalRounds = {{ room.total_rounds }};
 let currentPhase = 'waiting';
 let currentRoundId = '';
 let myLastVote = '';
@@ -260,15 +261,26 @@ function stopLocalCountdown() {
   }
 }
 
+// 更新顶部回合显示（第 x / y 回合）
+function setRoundDisplay(roundNumber, totalRoundNumber) {
+  if (Number.isFinite(Number(roundNumber))) {
+    currentRound = Number(roundNumber);
+    document.getElementById('round-number').textContent = String(currentRound);
+  }
+  if (Number.isFinite(Number(totalRoundNumber))) {
+    totalRounds = Number(totalRoundNumber);
+    document.getElementById('total-rounds').textContent = String(totalRounds);
+  }
+}
+
 function connectSSE() {
   eventSource = new EventSource(`/game/${roomId}/events`);
 
   // 游戏开始事件（第一回合）
   eventSource.addEventListener('game_start', (e) => {
     const data = JSON.parse(e.data);
-    currentRound = data.round_number;
+    setRoundDisplay(data.round_number, data.total_rounds);
     currentRoundId = data.round_id || '';
-    document.getElementById('round-number').textContent = data.round_number;
     document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
     document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
     document.getElementById('subject-name').textContent = data.subject_nickname;
@@ -292,9 +304,8 @@ function connectSSE() {
   // 新回合事件（后续轮次）
   eventSource.addEventListener('new_round', (e) => {
     const data = JSON.parse(e.data);
-    currentRound = data.round_number;
+    setRoundDisplay(data.round_number, data.total_rounds);
     currentRoundId = data.round_id || '';
-    document.getElementById('round-number').textContent = data.round_number;
     document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
     document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
     document.getElementById('subject-name').textContent = data.subject_nickname;
@@ -603,6 +614,7 @@ async function initGameState() {
     console.log('Room state:', roomData);
 
     if (roomData.success && roomData.players) {
+      setRoundDisplay(roomData.room?.current_round, roomData.room?.total_rounds);
       const me = roomData.players.find(p => p.id === playerId);
       if (me) {
         myNickname = me.nickname;
@@ -627,10 +639,7 @@ async function initGameState() {
     if (data.success && data.round) {
       const round = data.round;
       currentRoundId = round.id;
-      currentRound = round.round_number;
-
-      // 更新显示
-      document.getElementById('round-number').textContent = round.round_number;
+      setRoundDisplay(round.round_number, round.total_rounds);
       document.getElementById('interrogator-name').textContent = round.interrogator_nickname;
       document.getElementById('interrogator-avatar').textContent = round.interrogator_nickname[0];
       document.getElementById('subject-name').textContent = round.subject_nickname;
