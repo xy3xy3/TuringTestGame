@@ -6,7 +6,6 @@ import hashlib
 import os
 import secrets
 import string
-from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -14,6 +13,38 @@ from beanie import PydanticObjectId
 from app.models.game_room import GameRoom, GameConfig
 from app.models.game_player import GamePlayer
 from app.services import config_service
+
+DYNAMIC_ROUND_MULTIPLIER = 2
+MIN_TOTAL_ROUNDS = 1
+MAX_TOTAL_ROUNDS = 20
+
+
+def _parse_test_total_rounds_override() -> int | None:
+    """读取测试环境回合数覆盖配置。"""
+    if os.getenv("APP_ENV", "").strip().lower() != "test":
+        return None
+
+    raw_rounds = os.getenv("TEST_GAME_TOTAL_ROUNDS", "").strip()
+    if not raw_rounds:
+        return None
+
+    try:
+        rounds = int(raw_rounds)
+    except ValueError:
+        return None
+    return max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, rounds))
+
+
+def resolve_total_rounds_by_player_count(player_count: int, *, fallback: int = 4) -> int:
+    """按“玩家数 * 2”计算总回合数，并兼容测试环境覆盖。"""
+    override_rounds = _parse_test_total_rounds_override()
+    if override_rounds is not None:
+        return override_rounds
+
+    safe_player_count = max(1, int(player_count or 0))
+    dynamic_rounds = safe_player_count * DYNAMIC_ROUND_MULTIPLIER
+    normalized_fallback = max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, int(fallback or 4)))
+    return max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, dynamic_rounds or normalized_fallback))
 
 
 def _hash_password(password: str, salt: str = "") -> str:
@@ -67,14 +98,7 @@ async def create_room(
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
     """
-    # 测试环境允许覆盖总回合数，避免 E2E 跑太久。
-    if os.getenv("APP_ENV", "").strip().lower() == "test":
-        raw_rounds = os.getenv("TEST_GAME_TOTAL_ROUNDS", "").strip()
-        if raw_rounds:
-            try:
-                total_rounds = int(raw_rounds)
-            except ValueError:
-                pass
+    total_rounds = resolve_total_rounds_by_player_count(1, fallback=total_rounds)
 
     # 验证昵称长度
     if len(nickname) < 2:
@@ -201,6 +225,9 @@ async def join_room(
 
     # 将玩家加入房间列表
     room.player_ids.append(str(player.id))
+    # 动态同步总回合数：玩家数 * 2
+    room.total_rounds = resolve_total_rounds_by_player_count(player_count + 1, fallback=room.total_rounds)
+    room.config.rounds_per_game = room.total_rounds
     await room.save()
 
     # 通知所有玩家有新玩家加入
@@ -318,6 +345,12 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
             await room.delete()
         return {"success": True, "room_deleted": True}
 
+    if room.phase == "waiting":
+        # 等待阶段按当前玩家数同步总回合，避免页面展示与实际规则不一致。
+        room.total_rounds = resolve_total_rounds_by_player_count(remaining, fallback=room.total_rounds)
+        room.config.rounds_per_game = room.total_rounds
+        await room.save()
+
     return {"success": True, "room_deleted": False}
 
 
@@ -413,5 +446,11 @@ async def kick_player(room_id: str, player_id: str, requester_id: str) -> dict[s
 
     # 删除玩家
     await player.delete()
+
+    if room.phase == "waiting":
+        remaining = await GamePlayer.find({"room_id": room.room_id}).count()
+        room.total_rounds = resolve_total_rounds_by_player_count(remaining, fallback=room.total_rounds)
+        room.config.rounds_per_game = room.total_rounds
+        await room.save()
 
     return {"success": True}

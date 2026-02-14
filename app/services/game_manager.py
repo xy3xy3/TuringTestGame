@@ -210,6 +210,13 @@ class GameManager:
         players = await game_room_service.get_players_in_room(room.room_id)
         if len(players) < room.config.min_players:
             return {"success": False, "error": f"需要至少 {room.config.min_players} 名玩家"}
+
+        # 开始前按当前玩家数动态锁定总回合数（玩家数 * 2）。
+        room.total_rounds = game_room_service.resolve_total_rounds_by_player_count(
+            len(players),
+            fallback=room.total_rounds,
+        )
+        room.config.rounds_per_game = room.total_rounds
     
         # 更新房间状态为 SETUP
         room.phase = "setup"
