@@ -251,9 +251,8 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         expect(voter_pages[0].locator("#round-feedback-card")).to_contain_text("本轮得分变化：+50 分")
 
         expect(voter_pages[1].locator("#round-feedback-card")).to_be_visible(timeout=20_000)
-        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("你本轮作为陪审团")
-        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("本轮仅提问者计分")
-        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("本轮得分变化：0 分")
+        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("你本轮猜错了")
+        expect(voter_pages[1].locator("#round-feedback-card")).to_contain_text("本轮得分变化：-30 分")
 
         expect(subject_page.locator("#round-feedback-card")).to_be_visible(timeout=20_000)
         expect(subject_page.locator("#round-feedback-card")).to_contain_text("你本轮作为被测者")
@@ -285,7 +284,7 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         assert "P2" in leaderboard_text
         assert "P3" in leaderboard_text
 
-        # 12) 解析结果数据，校验排行榜顺序与分数（新规则：仅提问者计分）
+        # 12) 解析结果数据，校验排行榜顺序与分数（新规则：所有投票玩家计分）
         parsed = urlparse(owner.url)
         data_param = parse_qs(parsed.query).get("data", [])
         assert data_param, "结果页 URL 缺少 data 参数"
@@ -298,7 +297,7 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         expected_scores = {
             subject_name: 0,
             correct_voter: 50,
-            wrong_voter: 0,
+            wrong_voter: -30,
         }
 
         for entry in leaderboard:
@@ -310,6 +309,6 @@ def test_game_three_players_full_flow_and_leaderboard(e2e_base_url: str) -> None
         assert leaderboard[0]["nickname"] == correct_voter
         assert leaderboard[0]["score"] == 50
         assert leaderboard[1]["score"] == 0
-        assert leaderboard[2]["score"] == 0
+        assert leaderboard[2]["score"] == -30
 
         browser.close()

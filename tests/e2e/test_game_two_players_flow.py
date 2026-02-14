@@ -160,7 +160,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         # 被测者不能投票
         expect(subject_page.locator("#vote-area")).to_be_hidden()
 
-        # 选择“真人”（猜错），新规则下仅提问者扣分
+        # 选择“真人”（猜错），两人局只有提问者可投票，因此仅提问者扣分
         _vote(interrogator_page, "真人")
 
         # 8.1) 投票结算反馈：显示“猜对/猜错”与本轮分值影响
@@ -180,7 +180,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
             expect(page.locator("#leaderboard > div")).to_have_count(2, timeout=20_000)
 
         # 10) 校验结算数据
-        # 两人局新规则：仅提问者计分；提问者猜错 -30，被测者 0 分。
+        # 两人局：仅提问者可投票；提问者猜错 -30，被测者 0 分。
         parsed = urlparse(owner.url)
         data_param = parse_qs(parsed.query).get("data", [])
         assert data_param

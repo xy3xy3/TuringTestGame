@@ -746,18 +746,16 @@ class GameManager:
         """计算本回合得分。"""
         scores: dict[str, int] = {}
 
-        # 新规则：仅提问者计分。被测者与其它投票者的得分恒为 0。
-        interrogator_vote = next(
-            (vote for vote in votes if vote.voter_id == game_round.interrogator_id),
-            None,
-        )
-        if not interrogator_vote or interrogator_vote.vote == "skip":
-            return scores
-
-        if interrogator_vote.vote == game_round.answer_type:
-            scores[game_round.interrogator_id] = 50
-        else:
-            scores[game_round.interrogator_id] = -30
+        # 新规则：所有“投票玩家”（提问者 + 陪审团）都按投票结果计分；被测者不计分。
+        for vote in votes:
+            if vote.voter_id == game_round.subject_id:
+                continue
+            if vote.vote == "skip":
+                continue
+            if vote.vote == game_round.answer_type:
+                scores[vote.voter_id] = 50
+            else:
+                scores[vote.voter_id] = -30
         return scores
 
     async def _next_round(self, room_id: str):
