@@ -21,24 +21,31 @@
   </style>
 </head>
 
-<body class="antialiased">
+<body class="antialiased min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
   {% block content %}{% endblock %}
 
   {% set footer_text = request.state.footer_copyright_text | default("TuringTestGame", true) %}
   {% set footer_url = request.state.footer_copyright_url | default("https://github.com/xy3xy3/TuringTestGame", true) %}
-  <footer class="px-4 pb-4 text-center text-xs text-purple-200/80">
-    {% if footer_url %}
-      <a
-        href="{{ footer_url }}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="hover:text-white"
-      >
-        {{ footer_text }}
-      </a>
-    {% else %}
-      <span>{{ footer_text }}</span>
-    {% endif %}
+  <footer class="px-4 pb-6 pt-2">
+    <div class="mx-auto max-w-4xl rounded-xl border border-white/10 bg-white/10 backdrop-blur-sm">
+      {% if footer_url %}
+        <a
+          href="{{ footer_url }}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex items-center justify-center gap-2 px-4 py-3 text-sm text-purple-100 transition-colors hover:text-white"
+        >
+          <i class="fa-brands fa-github text-base"></i>
+          <span>开源项目：{{ footer_text }}</span>
+          <span class="text-xs text-purple-200/80">点击查看</span>
+        </a>
+      {% else %}
+        <div class="flex items-center justify-center gap-2 px-4 py-3 text-sm text-purple-100">
+          <i class="fa-solid fa-bullhorn text-base"></i>
+          <span>开源项目：{{ footer_text }}</span>
+        </div>
+      {% endif %}
+    </div>
   </footer>
 
   <div id="toast" data-variant="success" class="toast">
