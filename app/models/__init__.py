@@ -9,6 +9,7 @@ from .ai_model import AIModel
 from .game_room import GameRoom, GameConfig
 from .game_player import GamePlayer
 from .game_round import GameRound
+from .prompt_templates import PromptTemplatesItem
 from .vote_record import VoteRecord
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "GamePlayer",
     "GameRound",
     "VoteRecord",
+    "PromptTemplatesItem",
 ]

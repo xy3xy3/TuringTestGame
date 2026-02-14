@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from .config import MONGO_DB, MONGO_URL
 from .models import (
-    AdminUser,
-    Role,
-    ConfigItem,
-    OperationLog,
-    BackupRecord,
     AIModel,
-    GameRoom,
+    AdminUser,
+    BackupRecord,
+    ConfigItem,
     GamePlayer,
+    GameRoom,
     GameRound,
+    OperationLog,
+    PromptTemplatesItem,
+    Role,
     VoteRecord,
 )
 
@@ -39,6 +40,7 @@ async def init_db() -> None:
             GamePlayer,
             GameRound,
             VoteRecord,
+            PromptTemplatesItem,
         ],
     )
 

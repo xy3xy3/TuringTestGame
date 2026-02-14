@@ -1,0 +1,203 @@
+<div id="prompt_templates-table" class="card p-5" {% if request.state.permission_flags.resources.get("prompt_templates", {"delete": False})['delete'] %}data-bulk-scope{% endif %}>
+  {% set perm = request.state.permission_flags.resources.get("prompt_templates", {"create": False, "read": False, "update": False, "delete": False}) %}
+  {% set show_action_col = perm['update'] or perm['delete'] %}
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">模板列表</h2>
+      <p class="mt-1 text-sm text-slate-500">共 {{ items | length }} 条模板</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3"
+        hx-get="/admin/prompt_templates/table"
+        hx-target="#prompt_templates-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        title="刷新"
+        aria-label="刷新"
+      >
+        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+      </button>
+      {% if perm['create'] %}
+        <button
+          class="btn-ghost"
+          hx-post="/admin/prompt_templates/seed-defaults"
+          hx-target="#prompt_templates-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-confirm="确认一键添加 3 条预置模板吗？同名模板会自动跳过。"
+        >
+          一键添加预置模板
+        </button>
+        <button
+          class="btn-primary"
+          hx-get="/admin/prompt_templates/new"
+          hx-target="#modal-body"
+          hx-swap="innerHTML"
+          hx-indicator="#global-indicator"
+          x-on:click="modalOpen = true"
+        >
+          新建模板
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if perm['delete'] %}
+    <form class="mt-4 space-y-4 pb-20">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+        <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
+      </div>
+
+      <div class="overflow-x-auto rounded-lg border border-slate-200">
+        <table class="w-full min-w-[1080px] text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="w-12 px-4 py-3 text-center font-medium">
+                <input type="checkbox" class="h-4 w-4" data-bulk-master aria-label="全选本页" />
+              </th>
+              <th class="px-4 py-3 font-medium">名称</th>
+              <th class="px-4 py-3 font-medium">简介</th>
+              <th class="px-4 py-3 font-medium">提示词预览</th>
+              <th class="px-4 py-3 font-medium">状态</th>
+              <th class="px-4 py-3 font-medium">更新时间</th>
+              {% if show_action_col %}<th class="px-4 py-3 text-right font-medium">操作</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr class="border-t border-slate-100 align-top">
+                <td class="px-4 py-3 text-center">
+                  <input type="checkbox" class="h-4 w-4" name="selected_ids" value="{{ item.id }}" data-bulk-item />
+                </td>
+                <td class="px-4 py-3 text-slate-900">{{ item.name }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ item.description or "-" }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ item.prompt_text[:120] ~ ("..." if item.prompt_text|length > 120 else "") }}</td>
+                <td class="px-4 py-3">
+                  {% if item.status == "enabled" %}
+                    <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-600">启用</span>
+                  {% else %}
+                    <span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">禁用</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-slate-500">{{ item.updated_at.strftime("%Y-%m-%d %H:%M") if item.updated_at else "-" }}</td>
+                {% if show_action_col %}
+                  <td class="px-4 py-3 text-right">
+                    {% if perm['update'] %}
+                      <button
+                        type="button"
+                        class="btn-link"
+                        hx-get="/admin/prompt_templates/{{ item.id }}/edit"
+                        hx-target="#modal-body"
+                        hx-swap="innerHTML"
+                        hx-indicator="#global-indicator"
+                        x-on:click="modalOpen = true"
+                      >
+                        编辑
+                      </button>
+                    {% endif %}
+                    {% if perm['delete'] %}
+                      <button
+                        type="button"
+                        class="btn-link {% if perm['update'] %}ml-3 {% endif %}text-red-500 hover:text-red-600"
+                        hx-delete="/admin/prompt_templates/{{ item.id }}"
+                        hx-target="#prompt_templates-table"
+                        hx-swap="outerHTML"
+                        hx-confirm="确认删除该模板吗？"
+                        hx-indicator="#global-indicator"
+                      >
+                        删除
+                      </button>
+                    {% endif %}
+                  </td>
+                {% endif %}
+              </tr>
+            {% else %}
+              <tr>
+                <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="7">暂无模板，建议先一键添加预置模板。</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-20 hidden h-16 bg-slate-900/10 backdrop-blur-[2px]"
+        data-bulk-overlay
+        aria-hidden="true"
+      ></div>
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-30 hidden border-t border-slate-200/80 bg-white/65 shadow-[0_-8px_20px_rgba(15,23,42,0.12)] backdrop-blur-md"
+        data-bulk-bottom
+      >
+        <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
+          <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
+          <button
+            type="button"
+            class="btn-ghost text-red-500 hover:text-red-600"
+            data-bulk-submit
+            hx-post="/admin/prompt_templates/bulk-delete"
+            hx-include="closest form"
+            hx-target="#prompt_templates-table"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+            hx-confirm="确认批量删除已勾选模板吗？"
+            disabled
+          >
+            批量删除
+          </button>
+        </div>
+      </div>
+    </form>
+  {% else %}
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full min-w-[980px] text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-4 py-3 font-medium">名称</th>
+            <th class="px-4 py-3 font-medium">简介</th>
+            <th class="px-4 py-3 font-medium">提示词预览</th>
+            <th class="px-4 py-3 font-medium">状态</th>
+            <th class="px-4 py-3 font-medium">更新时间</th>
+            {% if show_action_col %}<th class="px-4 py-3 text-right font-medium">操作</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr class="border-t border-slate-100 align-top">
+              <td class="px-4 py-3 text-slate-900">{{ item.name }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ item.description or "-" }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ item.prompt_text[:120] ~ ("..." if item.prompt_text|length > 120 else "") }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ "启用" if item.status == "enabled" else "禁用" }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ item.updated_at.strftime("%Y-%m-%d %H:%M") if item.updated_at else "-" }}</td>
+              {% if show_action_col %}
+                <td class="px-4 py-3 text-right">
+                  {% if perm['update'] %}
+                    <button
+                      class="btn-link"
+                      hx-get="/admin/prompt_templates/{{ item.id }}/edit"
+                      hx-target="#modal-body"
+                      hx-swap="innerHTML"
+                      hx-indicator="#global-indicator"
+                      x-on:click="modalOpen = true"
+                    >
+                      编辑
+                    </button>
+                  {% endif %}
+                </td>
+              {% endif %}
+            </tr>
+          {% else %}
+            <tr>
+              <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="6">暂无模板。</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>

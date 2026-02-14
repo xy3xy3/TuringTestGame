@@ -28,6 +28,17 @@
           <li>• "你是一个 7 岁小孩，满是错别字"</li>
         </ul>
         <form id="setup-form" hx-post="/game/{{ room.id }}/setup" hx-target="#setup-result" hx-swap="innerHTML">
+          <div class="mb-4">
+            <label class="block text-sm text-purple-200 mb-1">快捷套用模板</label>
+            <select id="prompt-template-select" class="input w-full">
+              <option value="">自定义输入（不套用）</option>
+              {% for template in prompt_templates %}
+                <option value="{{ template.id }}">{{ template.name }}{% if template.description %} - {{ template.description }}{% endif %}</option>
+              {% endfor %}
+            </select>
+            <p class="text-xs text-purple-300 mt-1">选择后会自动填入下方提示词，你可以继续手动微调。</p>
+          </div>
+
           <textarea
             name="system_prompt"
             class="input w-full h-48"
@@ -89,6 +100,7 @@
 <script>
 const roomId = '{{ room.id }}';
 const setupTime = {{ room.config.setup_duration }};
+const promptTemplates = {{ prompt_templates | tojson }};
 let systemPrompt = '';
 let startedAt = null;
 let timerInterval = null;
@@ -96,6 +108,32 @@ let hasNavigated = false;  // 防止重复跳转
 let eventSource = null;
 let phasePollingTimer = null;
 let lastRemaining = setupTime;
+
+function bindPromptTemplateSelector() {
+  const selectEl = document.getElementById('prompt-template-select');
+  const textareaEl = document.querySelector('#setup-form textarea[name="system_prompt"]');
+  if (!selectEl || !textareaEl) return;
+
+  const applyTemplate = (templateId) => {
+    if (!templateId) return;
+    const matched = promptTemplates.find((item) => String(item.id) === String(templateId));
+    if (!matched) return;
+    textareaEl.value = String(matched.prompt_text || '');
+    systemPrompt = textareaEl.value;
+  };
+
+  const currentValue = String(textareaEl.value || "").trim();
+  if (currentValue) {
+    const currentTemplate = promptTemplates.find((item) => String(item.prompt_text || "").trim() === currentValue);
+    if (currentTemplate) {
+      selectEl.value = String(currentTemplate.id);
+    }
+  }
+
+  selectEl.addEventListener('change', () => {
+    applyTemplate(selectEl.value);
+  });
+}
 
 function navigateToPlay() {
   if (hasNavigated) return;
@@ -177,6 +215,7 @@ function updateCountdown() {
 
 // 初始化倒计时显示
 updateCountdown();
+bindPromptTemplateSelector();
 
 // 页面加载时获取房间状态
 fetch(`/game/api/${roomId}/state`)

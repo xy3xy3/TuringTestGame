@@ -14,7 +14,7 @@ from beanie import PydanticObjectId
 
 from app.models.game_player import GamePlayer
 from app.models.game_room import GameRoom
-from app.services import game_room_service, game_manager, ai_chat_service, sse_manager, config_service
+from app.services import ai_chat_service, config_service, game_manager, game_room_service, prompt_templates_service, sse_manager
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -315,6 +315,7 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
 
     # 获取可用 AI 模型
     ai_models = await ai_chat_service.get_enabled_models()
+    prompt_templates = await prompt_templates_service.list_enabled_template_options()
 
     return templates.TemplateResponse(
         "pages/setup.html",
@@ -323,6 +324,7 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
             "room": room,
             "player": player,
             "ai_models": ai_models,
+            "prompt_templates": prompt_templates,
         },
     )
 

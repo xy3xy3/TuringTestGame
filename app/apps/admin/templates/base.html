@@ -22,7 +22,7 @@
         "menuOpen": {
           "game": path.startswith("/admin/ai_models") or path.startswith("/admin/game_rooms"),
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
-          "system": path.startswith("/admin/config") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
+          "system": path.startswith("/admin/config") or path.startswith("/admin/prompt_templates") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
           "profile": path.startswith("/admin/profile") or path.startswith("/admin/password"),
         },
       }|tojson }}'
@@ -51,6 +51,9 @@
     {% elif path.startswith('/admin/config') %}
     {% set crumb_parent = "系统工具" %}
     {% set crumb_title = "系统配置" %}
+    {% elif path.startswith('/admin/prompt_templates') %}
+    {% set crumb_parent = "系统工具" %}
+    {% set crumb_title = "提示词模板" %}
     {% elif path.startswith('/admin/game_rooms') %}
     {% set crumb_parent = "游戏管理" %}
     {% set crumb_title = "房间管理" %}
@@ -166,6 +169,13 @@
                 系统配置
               </a>
               {% endif %}
+              {% if perm.prompt_templates.read %}
+              <a class="sider-link {% if path.startswith('/admin/prompt_templates') %}sider-link-active{% endif %}"
+                href="/admin/prompt_templates" x-on:click="mobileSidebarOpen = false">
+                <i class="fa-solid fa-file-pen sider-icon"></i>
+                提示词模板
+              </a>
+              {% endif %}
               {% if perm.operation_logs.read %}
               <a class="sider-link {% if path.startswith('/admin/logs') %}sider-link-active{% endif %}"
                 href="/admin/logs" x-on:click="mobileSidebarOpen = false">
@@ -277,7 +287,7 @@
             <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'system'"
               x-on:click.outside="collapsedMenuOpen = ''">
               <button type="button"
-                class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/logs') or path.startswith('/admin/backup') %}compact-link-active{% endif %}"
+                class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/prompt_templates') or path.startswith('/admin/logs') or path.startswith('/admin/backup') %}compact-link-active{% endif %}"
                 title="系统工具"
                 x-on:click="if (collapsedMenuOpen === 'system') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'system' }">
                 <i class="fa-solid fa-screwdriver-wrench"></i>
@@ -288,6 +298,12 @@
                 <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}"
                   href="/admin/config" x-on:click="collapsedMenuOpen = ''">
                   系统配置
+                </a>
+                {% endif %}
+                {% if perm.prompt_templates.read %}
+                <a class="compact-flyout-link {% if path.startswith('/admin/prompt_templates') %}compact-flyout-link-active{% endif %}"
+                  href="/admin/prompt_templates" x-on:click="collapsedMenuOpen = ''">
+                  提示词模板
                 </a>
                 {% endif %}
                 {% if perm.operation_logs.read %}

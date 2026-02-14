@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section class="card p-5">
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">提示词模板</h1>
+      <p class="text-sm text-slate-500">用于灵魂注入页面快速套用，玩家可继续微调后保存。</p>
+    </div>
+  </section>
+
+  <section>
+    {% include "partials/prompt_templates_table.html" %}
+  </section>
+</div>
+{% endblock %}

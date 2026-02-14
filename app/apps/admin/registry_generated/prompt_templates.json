@@ -1,0 +1,15 @@
+{
+  "group_key": "system",
+  "node": {
+    "key": "prompt_templates",
+    "name": "提示词模板",
+    "url": "/admin/prompt_templates",
+    "mode": "table",
+    "actions": [
+      "create",
+      "read",
+      "update",
+      "delete"
+    ]
+  }
+}
