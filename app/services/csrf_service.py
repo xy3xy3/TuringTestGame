@@ -42,22 +42,30 @@ def is_safe_method(method: str) -> bool:
 
 
 async def extract_submitted_token(request: Request) -> str:
-    """提取请求中提交的 CSRF Token（优先 Header，其次 urlencoded 表单）。"""
+    """提取请求中提交的 CSRF Token（优先 Header，其次表单字段）。"""
 
     header_token = (request.headers.get(CSRF_HEADER_NAME) or "").strip()
     if header_token:
         return header_token
 
     content_type = (request.headers.get("content-type") or "").lower()
-    if "application/x-www-form-urlencoded" not in content_type:
-        return ""
+    if "multipart/form-data" in content_type:
+        try:
+            form = await request.form()
+        except Exception:
+            return ""
+        value = form.get(CSRF_FORM_FIELD)
+        return str(value).strip() if value else ""
 
-    # body() 会缓存请求体，后续 FastAPI 依然能继续读取 Form 参数。
-    body = await request.body()
-    decoded = body.decode("utf-8", errors="ignore")
-    parsed = parse_qs(decoded)
-    values = parsed.get(CSRF_FORM_FIELD, [])
-    return str(values[0]).strip() if values else ""
+    if "application/x-www-form-urlencoded" in content_type:
+        # body() 会缓存请求体，后续 FastAPI 依然能继续读取 Form 参数。
+        body = await request.body()
+        decoded = body.decode("utf-8", errors="ignore")
+        parsed = parse_qs(decoded)
+        values = parsed.get(CSRF_FORM_FIELD, [])
+        return str(values[0]).strip() if values else ""
+
+    return ""
 
 
 async def validate_request_token(request: Request, session_token: str) -> bool:
