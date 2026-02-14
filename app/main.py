@@ -15,6 +15,7 @@ from .apps.admin.controllers.ai_models import router as ai_models_router
 from .apps.admin.controllers.auth import router as auth_router
 from .apps.admin.controllers.backup import router as backup_router
 from .apps.admin.controllers.config import router as config_router
+from .apps.admin.controllers.game_rooms import router as game_rooms_router
 from .apps.admin.controllers.logs import router as logs_router
 from .apps.admin.controllers.rbac import router as admin_router
 from .apps.game.controllers.game import router as game_router
@@ -50,6 +51,7 @@ app.include_router(ai_models_router)
 app.include_router(config_router)
 app.include_router(logs_router)
 app.include_router(backup_router)
+app.include_router(game_rooms_router)
 
 
 @app.get("/")

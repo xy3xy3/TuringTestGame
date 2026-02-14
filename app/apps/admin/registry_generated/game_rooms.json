@@ -1,0 +1,12 @@
+{
+  "group_key": "game",
+  "node": {
+    "key": "game_rooms",
+    "name": "房间管理",
+    "url": "/admin/game_rooms",
+    "mode": "table",
+    "actions": [
+      "read"
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+<div id="game-rooms-table" class="card p-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">房间列表</h2>
+      <p class="mt-1 text-sm text-slate-500">共 {{ pagination.total }} 个房间</p>
+    </div>
+
+    <button
+      class="btn-ghost px-3"
+      hx-get="/admin/game_rooms/table"
+      hx-target="#game-rooms-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"search_q": filters.search_q, "search_phase": filters.search_phase, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+      title="刷新"
+      aria-label="刷新"
+    >
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  {% if rows %}
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full min-w-[1100px] text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-4 py-3 font-medium">房间号</th>
+            <th class="px-4 py-3 font-medium">状态</th>
+            <th class="px-4 py-3 font-medium">玩家数</th>
+            <th class="px-4 py-3 font-medium">回合</th>
+            <th class="px-4 py-3 font-medium">玩家限制</th>
+            <th class="px-4 py-3 font-medium">创建时间</th>
+            <th class="px-4 py-3 font-medium">开始时间</th>
+            <th class="px-4 py-3 font-medium">结束时间</th>
+            <th class="px-4 py-3 font-medium">房主 ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set room = row.room %}
+            <tr class="border-t border-slate-100">
+              <td class="px-4 py-3 text-slate-900 font-medium">{{ room.room_id }}</td>
+              <td class="px-4 py-3">
+                {% if room.phase == "waiting" %}
+                  <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ phase_options[room.phase] }}</span>
+                {% elif room.phase == "setup" %}
+                  <span class="tag-compact" style="border-color: #6b46c1; color: #6b46c1;">{{ phase_options[room.phase] }}</span>
+                {% elif room.phase == "playing" %}
+                  <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ phase_options[room.phase] }}</span>
+                {% else %}
+                  <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ phase_options.get(room.phase, room.phase) }}</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ row.player_count }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ room.current_round }}/{{ room.total_rounds }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ room.config.min_players }} - {{ room.config.max_players }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ room.created_at | fmt_dt }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ room.started_at | fmt_dt }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ room.finished_at | fmt_dt }}</td>
+              <td class="px-4 py-3 text-xs text-slate-500">{{ room.owner_id }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+      <p class="text-lg font-semibold text-slate-800">暂无房间数据</p>
+      <p class="mt-2 text-sm text-slate-500">当前筛选条件下没有可展示的房间。</p>
+    </div>
+  {% endif %}
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/game_rooms/table"
+        hx-target="#game-rooms-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_phase": filters.search_phase, "search_sort": filters.search_sort, "page": pagination.prev_page}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/game_rooms/table"
+          hx-target="#game-rooms-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "search_phase": filters.search_phase, "search_sort": filters.search_sort, "page": p}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/game_rooms/table"
+        hx-target="#game-rooms-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_phase": filters.search_phase, "search_sort": filters.search_sort, "page": pagination.next_page}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
+</div>

@@ -20,7 +20,7 @@
         "userMenuOpen": False,
         "collapsedMenuOpen": "",
         "menuOpen": {
-          "game": path.startswith("/admin/ai_models"),
+          "game": path.startswith("/admin/ai_models") or path.startswith("/admin/game_rooms"),
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
           "system": path.startswith("/admin/config") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
           "profile": path.startswith("/admin/profile") or path.startswith("/admin/password"),
@@ -51,6 +51,9 @@
     {% elif path.startswith('/admin/config') %}
     {% set crumb_parent = "系统工具" %}
     {% set crumb_title = "系统配置" %}
+    {% elif path.startswith('/admin/game_rooms') %}
+    {% set crumb_parent = "游戏管理" %}
+    {% set crumb_title = "房间管理" %}
     {% elif path.startswith('/admin/logs') %}
     {% set crumb_parent = "系统工具" %}
     {% set crumb_title = "操作日志" %}
@@ -107,6 +110,13 @@
                 href="/admin/ai_models" x-on:click="mobileSidebarOpen = false">
                 <i class="fa-solid fa-robot sider-icon"></i>
                 AI模型配置
+              </a>
+              {% endif %}
+              {% if perm.game_rooms.read %}
+              <a class="sider-link {% if path.startswith('/admin/game_rooms') %}sider-link-active{% endif %}"
+                href="/admin/game_rooms" x-on:click="mobileSidebarOpen = false">
+                <i class="fa-solid fa-door-open sider-icon"></i>
+                房间管理
               </a>
               {% endif %}
             </div>
@@ -213,7 +223,7 @@
             <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'game'"
               x-on:click.outside="collapsedMenuOpen = ''">
               <button type="button"
-                class="compact-trigger {% if path.startswith('/admin/ai_models') %}compact-link-active{% endif %}"
+                class="compact-trigger {% if path.startswith('/admin/ai_models') or path.startswith('/admin/game_rooms') %}compact-link-active{% endif %}"
                 title="游戏管理"
                 x-on:click="if (collapsedMenuOpen === 'game') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'game' }">
                 <i class="fa-solid fa-gamepad"></i>
@@ -224,6 +234,12 @@
                 <a class="compact-flyout-link {% if path.startswith('/admin/ai_models') %}compact-flyout-link-active{% endif %}"
                   href="/admin/ai_models" x-on:click="collapsedMenuOpen = ''">
                   AI模型配置
+                </a>
+                {% endif %}
+                {% if perm.game_rooms.read %}
+                <a class="compact-flyout-link {% if path.startswith('/admin/game_rooms') %}compact-flyout-link-active{% endif %}"
+                  href="/admin/game_rooms" x-on:click="collapsedMenuOpen = ''">
+                  房间管理
                 </a>
                 {% endif %}
               </div>

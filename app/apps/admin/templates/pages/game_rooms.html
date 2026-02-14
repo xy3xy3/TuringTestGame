@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4">
+  <section
+    class="card p-5"
+    x-data='{{ {"search_q": filters.search_q, "search_phase": filters.search_phase, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+  >
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">房间管理（只读）</h1>
+      <p class="text-sm text-slate-500">仅展示房间状态，不提供新增/修改/删除操作</p>
+    </div>
+
+    <form
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/game_rooms/table"
+      hx-target="#game-rooms-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+
+      <div class="md:col-span-6">
+        <label class="label">关键词</label>
+        <input
+          name="search_q"
+          x-model="search_q"
+          class="input"
+          placeholder="房间号 / 房主 ID"
+        />
+      </div>
+
+      <div class="md:col-span-3">
+        <label class="label">房间状态</label>
+        <select name="search_phase" x-model="search_phase" class="input">
+          <option value="">全部</option>
+          {% for key, label in phase_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-3">
+        <label class="label">排序</label>
+        <select name="search_sort" x-model="search_sort" class="input">
+          {% for key, label in room_sort_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="md:col-span-12 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; search_phase=''; search_sort='created_desc'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/game_rooms_table.html" %}
+  </section>
+</div>
+{% endblock %}

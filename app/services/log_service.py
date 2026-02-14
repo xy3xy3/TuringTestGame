@@ -18,6 +18,7 @@ MODULE_LABELS: dict[str, str] = {
     "config": "系统配置",
     "logs": "操作日志",
     "backup": "数据备份",
+    "game_rooms": "房间管理",
 }
 
 
