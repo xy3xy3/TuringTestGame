@@ -94,10 +94,15 @@ let startedAt = null;
 let timerInterval = null;
 let hasNavigated = false;  // 防止重复跳转
 let eventSource = null;
+let phasePollingTimer = null;
 
 function navigateToPlay() {
   if (hasNavigated) return;
   hasNavigated = true;
+  if (phasePollingTimer) {
+    clearInterval(phasePollingTimer);
+    phasePollingTimer = null;
+  }
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
@@ -106,6 +111,27 @@ function navigateToPlay() {
     eventSource.close();
   }
   window.location.href = `/game/${roomId}/play`;
+}
+
+function checkRoomPhaseAndNavigate() {
+  if (hasNavigated) return;
+  fetch(`/game/api/${roomId}/state`)
+    .then(res => res.json())
+    .then(data => {
+      const phase = data?.room?.phase;
+      if (phase === 'playing') {
+        navigateToPlay();
+      }
+    })
+    .catch(() => {
+      // 网络抖动时静默重试，避免影响页面体验
+    });
+}
+
+function ensurePhasePolling() {
+  if (hasNavigated || phasePollingTimer) return;
+  checkRoomPhaseAndNavigate();
+  phasePollingTimer = setInterval(checkRoomPhaseAndNavigate, 700);
 }
 
 // 计算剩余时间（基于服务器 UTC 时间戳）
@@ -125,8 +151,13 @@ function updateCountdown() {
 
   // 倒计时结束，自动跳转
   if (remaining <= 0 && !hasNavigated) {
-    // 倒计时结束，强制跳转到游戏页面
-    navigateToPlay();
+    // 注意：这里不立刻跳转，等待服务端房间状态真正进入 playing。
+    // 否则可能被 /play -> /setup 重定向回弹，出现 0 和初始值来回跳动。
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    ensurePhasePolling();
   }
 }
 
@@ -192,6 +223,9 @@ eventSource.addEventListener('countdown', (e) => {
     // 直接使用服务器剩余时间更新显示
     document.getElementById('countdown').textContent = data.remaining;
     document.getElementById('progress-bar').style.width = `${(data.remaining / setupTime) * 100}%`;
+    if (Number(data.remaining) <= 0) {
+      ensurePhasePolling();
+    }
   } else if (data.started_at) {
     startedAt = new Date(data.started_at).getTime();
     updateCountdown();
@@ -268,6 +302,10 @@ async function sendTestMessage() {
 }
 
 window.addEventListener('beforeunload', () => {
+  if (phasePollingTimer) {
+    clearInterval(phasePollingTimer);
+    phasePollingTimer = null;
+  }
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
