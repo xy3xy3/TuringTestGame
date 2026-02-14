@@ -10,8 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 使用 uv 安装依赖
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock README.md /app/
-RUN uv sync --frozen --no-dev --no-install-project
+COPY pyproject.toml README.md /app/
+RUN uv sync --no-dev --no-install-project
 
 COPY app /app/app
 
