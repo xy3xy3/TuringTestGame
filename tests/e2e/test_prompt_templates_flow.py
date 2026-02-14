@@ -45,6 +45,9 @@ def test_prompt_templates_seed_and_setup_apply(
 
         admin_page.goto(f"{e2e_base_url}/admin/prompt_templates", wait_until="networkidle")
         expect(admin_page.get_by_role("heading", name="提示词模板")).to_be_visible()
+        expect(admin_page.locator('.sider-tree a[href="/admin/prompt_templates"]')).to_be_visible()
+        expect(admin_page.locator(".breadcrumb-muted")).to_have_text("游戏管理")
+        expect(admin_page.locator(".breadcrumb-current")).to_have_text("提示词模板")
 
         admin_page.once("dialog", lambda dialog: dialog.accept())
         admin_page.get_by_role("button", name="一键添加预置模板").click()

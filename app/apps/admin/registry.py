@@ -96,6 +96,13 @@ BASE_ADMIN_TREE = [
                 "mode": "settings",
             },
             {
+                "key": "prompt_templates",
+                "name": "提示词模板",
+                "url": "/admin/prompt_templates",
+                "actions": ["create", "read", "update", "delete"],
+                "mode": "table",
+            },
+            {
                 "key": "operation_logs",
                 "name": "操作日志",
                 "url": "/admin/logs",

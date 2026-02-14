@@ -13,6 +13,9 @@
 <body class="antialiased">
   {% set path = request.url.path %}
   {% set perm = request.state.permission_flags %}
+  {% set prompt_templates_perm = perm.resources.get("prompt_templates", {"read": False}) %}
+  {% set show_game_menu = perm.menus.game or prompt_templates_perm['read'] %}
+  {% set show_system_menu = perm.config.read or perm.operation_logs.read or perm.backup_records.read %}
   <div id="app" x-data='{{ {
         "modalOpen": False,
         "mobileSidebarOpen": False,
@@ -20,9 +23,9 @@
         "userMenuOpen": False,
         "collapsedMenuOpen": "",
         "menuOpen": {
-          "game": path.startswith("/admin/ai_models") or path.startswith("/admin/game_rooms"),
+          "game": path.startswith("/admin/ai_models") or path.startswith("/admin/game_rooms") or path.startswith("/admin/prompt_templates"),
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
-          "system": path.startswith("/admin/config") or path.startswith("/admin/prompt_templates") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
+          "system": path.startswith("/admin/config") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
           "profile": path.startswith("/admin/profile") or path.startswith("/admin/password"),
         },
       }|tojson }}'
@@ -52,7 +55,7 @@
     {% set crumb_parent = "系统工具" %}
     {% set crumb_title = "系统配置" %}
     {% elif path.startswith('/admin/prompt_templates') %}
-    {% set crumb_parent = "系统工具" %}
+    {% set crumb_parent = "游戏管理" %}
     {% set crumb_title = "提示词模板" %}
     {% elif path.startswith('/admin/game_rooms') %}
     {% set crumb_parent = "游戏管理" %}
@@ -98,7 +101,7 @@
             </a>
             {% endif %}
 
-            {% if perm.menus.game %}
+            {% if show_game_menu %}
             <button type="button" class="sider-parent mt-4" x-on:click="menuOpen.game = !menuOpen.game">
               <span class="sider-parent-main">
                 <i class="fa-solid fa-gamepad sider-icon"></i>
@@ -120,6 +123,13 @@
                 href="/admin/game_rooms" x-on:click="mobileSidebarOpen = false">
                 <i class="fa-solid fa-door-open sider-icon"></i>
                 房间管理
+              </a>
+              {% endif %}
+              {% if prompt_templates_perm['read'] %}
+              <a class="sider-link {% if path.startswith('/admin/prompt_templates') %}sider-link-active{% endif %}"
+                href="/admin/prompt_templates" x-on:click="mobileSidebarOpen = false">
+                <i class="fa-solid fa-file-pen sider-icon"></i>
+                提示词模板
               </a>
               {% endif %}
             </div>
@@ -152,7 +162,7 @@
             </div>
             {% endif %}
 
-            {% if perm.menus.system %}
+            {% if show_system_menu %}
             <button type="button" class="sider-parent mt-4" x-on:click="menuOpen.system = !menuOpen.system">
               <span class="sider-parent-main">
                 <i class="fa-solid fa-screwdriver-wrench sider-icon"></i>
@@ -167,13 +177,6 @@
                 href="/admin/config" x-on:click="mobileSidebarOpen = false">
                 <i class="fa-solid fa-gears sider-icon"></i>
                 系统配置
-              </a>
-              {% endif %}
-              {% if perm.prompt_templates.read %}
-              <a class="sider-link {% if path.startswith('/admin/prompt_templates') %}sider-link-active{% endif %}"
-                href="/admin/prompt_templates" x-on:click="mobileSidebarOpen = false">
-                <i class="fa-solid fa-file-pen sider-icon"></i>
-                提示词模板
               </a>
               {% endif %}
               {% if perm.operation_logs.read %}
@@ -229,11 +232,11 @@
             </a>
             {% endif %}
 
-            {% if perm.menus.game %}
+            {% if show_game_menu %}
             <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'game'"
               x-on:click.outside="collapsedMenuOpen = ''">
               <button type="button"
-                class="compact-trigger {% if path.startswith('/admin/ai_models') or path.startswith('/admin/game_rooms') %}compact-link-active{% endif %}"
+                class="compact-trigger {% if path.startswith('/admin/ai_models') or path.startswith('/admin/game_rooms') or path.startswith('/admin/prompt_templates') %}compact-link-active{% endif %}"
                 title="游戏管理"
                 x-on:click="if (collapsedMenuOpen === 'game') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'game' }">
                 <i class="fa-solid fa-gamepad"></i>
@@ -250,6 +253,12 @@
                 <a class="compact-flyout-link {% if path.startswith('/admin/game_rooms') %}compact-flyout-link-active{% endif %}"
                   href="/admin/game_rooms" x-on:click="collapsedMenuOpen = ''">
                   房间管理
+                </a>
+                {% endif %}
+                {% if prompt_templates_perm['read'] %}
+                <a class="compact-flyout-link {% if path.startswith('/admin/prompt_templates') %}compact-flyout-link-active{% endif %}"
+                  href="/admin/prompt_templates" x-on:click="collapsedMenuOpen = ''">
+                  提示词模板
                 </a>
                 {% endif %}
               </div>
@@ -283,11 +292,11 @@
             </div>
             {% endif %}
 
-            {% if perm.menus.system %}
+            {% if show_system_menu %}
             <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'system'"
               x-on:click.outside="collapsedMenuOpen = ''">
               <button type="button"
-                class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/prompt_templates') or path.startswith('/admin/logs') or path.startswith('/admin/backup') %}compact-link-active{% endif %}"
+                class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/logs') or path.startswith('/admin/backup') %}compact-link-active{% endif %}"
                 title="系统工具"
                 x-on:click="if (collapsedMenuOpen === 'system') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'system' }">
                 <i class="fa-solid fa-screwdriver-wrench"></i>
@@ -298,12 +307,6 @@
                 <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}"
                   href="/admin/config" x-on:click="collapsedMenuOpen = ''">
                   系统配置
-                </a>
-                {% endif %}
-                {% if perm.prompt_templates.read %}
-                <a class="compact-flyout-link {% if path.startswith('/admin/prompt_templates') %}compact-flyout-link-active{% endif %}"
-                  href="/admin/prompt_templates" x-on:click="collapsedMenuOpen = ''">
-                  提示词模板
                 </a>
                 {% endif %}
                 {% if perm.operation_logs.read %}
