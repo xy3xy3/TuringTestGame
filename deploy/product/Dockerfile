@@ -4,13 +4,14 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APP_PORT=8000
+    APP_PORT=8000 \
+    PATH="/app/.venv/bin:$PATH"
 
 # 使用 uv 安装依赖
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml README.md /app/
-RUN uv sync --system --no-dev
+COPY pyproject.toml uv.lock README.md /app/
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app /app/app
 
