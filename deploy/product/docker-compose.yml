@@ -1,3 +1,5 @@
+name: product
+
 services:
   mongo:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
@@ -23,14 +25,12 @@ services:
       dockerfile: deploy/product/Dockerfile
     container_name: TuringTestGame-app
     restart: unless-stopped
+    env_file:
+      - ../../.env
     environment:
       APP_PORT: ${APP_PORT:-8000}
       MONGO_URL: mongodb://mongo:27017
       REDIS_URL: redis://redis:6379/0
-      MONGO_DB: ${MONGO_DB:-TuringTestGame}
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS: ${ADMIN_PASS:-admin123}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:
@@ -39,4 +39,6 @@ services:
 
 volumes:
   mongo_data:
+    name: product_mongo_data
   redis_data:
+    name: product_redis_data

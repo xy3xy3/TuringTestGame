@@ -155,9 +155,13 @@ uv run pytest -m e2e
 ## 生产部署（Docker Compose）
 
 ```bash
-cd deploy/product
-docker compose --env-file ../../.env up -d --build
+# 推荐在项目根目录执行（避免路径切换导致读取错环境文件）
+docker compose -f deploy/product/docker-compose.yml up -d --build
 ```
+
+说明
+- `deploy/product/docker-compose.yml` 已固定项目名与卷名（`product_*`），避免不同目录执行命令时创建新卷导致“数据像丢失”。
+- `app` 服务已内置 `env_file: ../../.env`，即使不手动传 `--env-file` 也会读取项目根目录 `.env`。
 
 部署要点
 - 正确配置 `MONGO_URL/MONGO_DB/SECRET_KEY`
