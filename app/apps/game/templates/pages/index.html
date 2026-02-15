@@ -90,6 +90,8 @@
 </div>
 
 <script>
+  const BONUS_SCORING_PREF_KEY = 'ttg_bonus_scoring_enabled';
+
   // 表单验证
   function validateNickname(formId) {
     const form = document.getElementById(formId);
@@ -115,6 +117,33 @@
 
   validateNickname('create-form');
   validateNickname('join-form');
+
+  // 记住“创建房间时是否开启附加给分机制”的用户选择。
+  function initBonusScoringPreference() {
+    const toggle = document.querySelector('#create-form input[name="bonus_scoring_enabled"]');
+    if (!toggle) return;
+
+    try {
+      const saved = localStorage.getItem(BONUS_SCORING_PREF_KEY);
+      if (saved === '1') {
+        toggle.checked = true;
+      } else if (saved === '0') {
+        toggle.checked = false;
+      }
+    } catch (_error) {
+      // 忽略浏览器禁用 localStorage 的场景。
+    }
+
+    toggle.addEventListener('change', function() {
+      try {
+        localStorage.setItem(BONUS_SCORING_PREF_KEY, this.checked ? '1' : '0');
+      } catch (_error) {
+        // 忽略写入失败，不影响正常创建房间流程。
+      }
+    });
+  }
+
+  initBonusScoringPreference();
 
   // 处理邀请链接参数
   function handleInviteLink() {
