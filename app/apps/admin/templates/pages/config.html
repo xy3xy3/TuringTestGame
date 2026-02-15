@@ -614,6 +614,43 @@
         </div>
       </div>
 
+      <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">房间规则上限</h3>
+            <p class="text-xs text-slate-500 mt-1">实际回合数会按 min(最大回合数, 2 × 当前玩家数) 自动计算。</p>
+          </div>
+        </div>
+        <div class="mt-4 grid gap-4 md:grid-cols-12">
+          <div class="md:col-span-6 lg:col-span-4">
+            <label class="label">最大房间玩家数量</label>
+            <input
+              name="max_room_players"
+              type="number"
+              min="2"
+              max="16"
+              class="input"
+              value="{{ game_rule_config.max_room_players }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">新建房间可容纳的玩家上限（2-16人）。</p>
+          </div>
+          <div class="md:col-span-6 lg:col-span-4">
+            <label class="label">最大回合数</label>
+            <input
+              name="max_rounds"
+              type="number"
+              min="1"
+              max="20"
+              class="input"
+              value="{{ game_rule_config.max_rounds }}"
+              {% if not config_perm['update'] %}readonly{% endif %}
+            />
+            <p class="text-xs text-slate-500 mt-1">新建房间总回合上限（1-20回合）。</p>
+          </div>
+        </div>
+      </div>
+
       <div class="mt-4 grid gap-4 md:grid-cols-12">
         <div class="md:col-span-6 lg:col-span-4">
           <label class="label">灵魂注入时长</label>

@@ -65,6 +65,7 @@ async def _build_config_page_context(
     rate_limit_config = await config_service.get_rate_limit_config()
     cleanup_config = await cleanup_service.get_cleanup_config()
     game_time_config = await config_service.get_game_time_config()
+    game_rule_config = await config_service.get_game_rule_config()
     game_role_balance_config = await config_service.get_game_role_balance_config()
     game_bgm_config = await config_service.get_game_bgm_config()
     return {
@@ -83,6 +84,7 @@ async def _build_config_page_context(
         "rate_limit_config": rate_limit_config,
         "cleanup_config": cleanup_config,
         "game_time_config": game_time_config,
+        "game_rule_config": game_rule_config,
         "game_role_balance_config": game_role_balance_config,
         "game_bgm_phase_labels": config_service.GAME_BGM_PHASE_KEYS,
         "game_bgm_config": game_bgm_config,
@@ -315,6 +317,11 @@ async def config_save(
         "reveal_delay": int(form_data.get("reveal_delay", "3") or "3"),
     }
     await config_service.save_game_time_config(game_time_payload)
+    game_rule_payload = {
+        "max_room_players": form_data.get("max_room_players", "8"),
+        "max_rounds": form_data.get("max_rounds", "20"),
+    }
+    await config_service.save_game_rule_config(game_rule_payload)
     game_role_balance_payload = {
         "pity_gap_threshold": form_data.get("role_pity_gap_threshold", "2"),
         "weight_base": form_data.get("role_weight_base", "100"),

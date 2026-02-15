@@ -470,6 +470,31 @@ async def submit_question(request: Request, room_id: str) -> HTMLResponse:
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "提交失败")}</div>')
 
 
+@router.post("/{room_id}/draft")
+async def save_round_draft(request: Request, room_id: str) -> dict[str, Any]:
+    """保存回合草稿（用于倒计时结束自动提交）。"""
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    player = await _get_authed_player(request, room)
+    if not player:
+        return {"success": False, "error": "未登录"}
+
+    form_data = await request.form()
+    round_id = str(form_data.get("round_id", "")).strip()
+    draft_type = str(form_data.get("draft_type", "")).strip()
+    content = str(form_data.get("content", ""))
+    result = await game_manager.save_round_draft(
+        room_id=room_id,
+        round_id=round_id,
+        player_id=str(player.id),
+        draft_type=draft_type,
+        content=content,
+    )
+    return result
+
+
 @router.post("/{room_id}/answer", response_class=HTMLResponse)
 async def submit_answer(request: Request, room_id: str) -> HTMLResponse:
     """提交回答。"""

@@ -30,6 +30,7 @@ async def test_start_game_syncs_latest_time_config(monkeypatch) -> None:
                 answer_duration=25,
                 vote_duration=10,
                 reveal_delay=2,
+                max_rounds=20,
                 rounds_per_game=4,
             )
 
@@ -64,7 +65,11 @@ async def test_start_game_syncs_latest_time_config(monkeypatch) -> None:
 
     monkeypatch.setattr(game_room_service, "get_room_by_id", fake_get_room_by_id)
     monkeypatch.setattr(game_room_service, "get_players_in_room", fake_get_players_in_room)
-    monkeypatch.setattr(game_room_service, "resolve_total_rounds_by_player_count", lambda count, fallback=4: count * 2)
+    monkeypatch.setattr(
+        game_room_service,
+        "resolve_total_rounds_by_player_count",
+        lambda count, fallback=4, max_rounds=20: min(max_rounds, count * 2),
+    )
     monkeypatch.setattr("app.services.config_service.get_game_time_config", fake_get_game_time_config)
     monkeypatch.setattr(sse_manager, "publish", fake_publish)
     monkeypatch.setattr(manager, "_start_timer", fake_start_timer)

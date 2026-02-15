@@ -256,6 +256,46 @@ async def test_save_game_time_config_clamps_to_latest_ranges(monkeypatch) -> Non
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_save_game_rule_config_clamps_values(monkeypatch) -> None:
+    """保存房间规则配置时应按区间裁剪。"""
+
+    class FakeConfigItem:
+        def __init__(self, value: str) -> None:
+            self.value = value
+            self.name = ""
+            self.description = ""
+            self.updated_at = None
+            self.saved = False
+
+        async def save(self) -> None:
+            self.saved = True
+
+    items = {
+        key: FakeConfigItem(str(default))
+        for key, (_name, default, _minimum, _maximum) in config_service.GAME_RULE_CONFIG_KEYS.items()
+    }
+
+    async def fake_find_config_item(_group: str, key: str):
+        return items.get(key)
+
+    monkeypatch.setattr(config_service, "find_config_item", fake_find_config_item)
+
+    config = await config_service.save_game_rule_config(
+        {
+            "max_room_players": "99",
+            "max_rounds": "0",
+        }
+    )
+
+    assert config["max_room_players"] == 16
+    assert config["max_rounds"] == 1
+    assert items["max_room_players"].value == "16"
+    assert items["max_rounds"].value == "1"
+    assert all(item.saved for item in items.values())
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_game_bgm_config_normalizes_values(monkeypatch) -> None:
     """读取游戏阶段背景音乐时应清洗为合法静态地址。"""
 

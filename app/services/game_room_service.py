@@ -35,16 +35,22 @@ def _parse_test_total_rounds_override() -> int | None:
     return max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, rounds))
 
 
-def resolve_total_rounds_by_player_count(player_count: int, *, fallback: int = 4) -> int:
-    """按“玩家数 * 2”计算总回合数，并兼容测试环境覆盖。"""
+def resolve_total_rounds_by_player_count(
+    player_count: int,
+    *,
+    fallback: int = 4,
+    max_rounds: int = MAX_TOTAL_ROUNDS,
+) -> int:
+    """按“玩家数 * 2”计算总回合数，并按房间回合上限裁剪。"""
+    resolved_cap = max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, int(max_rounds or MAX_TOTAL_ROUNDS)))
     override_rounds = _parse_test_total_rounds_override()
     if override_rounds is not None:
-        return override_rounds
+        return min(resolved_cap, override_rounds)
 
     safe_player_count = max(1, int(player_count or 0))
     dynamic_rounds = safe_player_count * DYNAMIC_ROUND_MULTIPLIER
-    normalized_fallback = max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, int(fallback or 4)))
-    return max(MIN_TOTAL_ROUNDS, min(MAX_TOTAL_ROUNDS, dynamic_rounds or normalized_fallback))
+    normalized_fallback = max(MIN_TOTAL_ROUNDS, min(resolved_cap, int(fallback or 4)))
+    return max(MIN_TOTAL_ROUNDS, min(resolved_cap, dynamic_rounds or normalized_fallback))
 
 
 def _hash_password(password: str, salt: str = "") -> str:
@@ -92,21 +98,24 @@ async def create_room(
         password: 房间密码（可选）
         owner_nickname: 房主显示名称
         min_players: 最少玩家数
-        max_players: 最多玩家数
-        total_rounds: 总回合数
+        max_players: 最多玩家数（会受后台“最大房间玩家数量”配置约束）
+        total_rounds: 总回合数基线（会按“min(最大回合数, 玩家数*2)”动态计算）
 
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
     """
-    total_rounds = resolve_total_rounds_by_player_count(1, fallback=total_rounds)
-
     # 验证昵称长度
     if len(nickname) < 2:
         return {"success": False, "error": "昵称至少需要2个字符"}
 
-    # 获取系统配置的游戏时间和角色保底参数
+    # 获取系统配置的游戏规则、时长和角色保底参数
+    game_rule_config = await config_service.get_game_rule_config()
     game_time_config = await config_service.get_game_time_config()
     role_balance_config = await config_service.get_game_role_balance_config()
+    max_rounds = int(game_rule_config.get("max_rounds", MAX_TOTAL_ROUNDS))
+    total_rounds = resolve_total_rounds_by_player_count(1, fallback=total_rounds, max_rounds=max_rounds)
+    configured_max_players = int(game_rule_config.get("max_room_players", max_players))
+    resolved_max_players = max(min_players, min(int(max_players), configured_max_players))
 
     room_code = generate_room_code()
 
@@ -117,7 +126,8 @@ async def create_room(
     # 创建游戏配置
     game_config = GameConfig(
         min_players=min_players,
-        max_players=max_players,
+        max_players=resolved_max_players,
+        max_rounds=max_rounds,
         rounds_per_game=total_rounds,
         setup_duration=game_time_config.get("setup_duration", 60),
         question_duration=game_time_config.get("question_duration", 30),
@@ -226,7 +236,11 @@ async def join_room(
     # 将玩家加入房间列表
     room.player_ids.append(str(player.id))
     # 动态同步总回合数：玩家数 * 2
-    room.total_rounds = resolve_total_rounds_by_player_count(player_count + 1, fallback=room.total_rounds)
+    room.total_rounds = resolve_total_rounds_by_player_count(
+        player_count + 1,
+        fallback=room.total_rounds,
+        max_rounds=getattr(room.config, "max_rounds", MAX_TOTAL_ROUNDS),
+    )
     room.config.rounds_per_game = room.total_rounds
     await room.save()
 
@@ -347,7 +361,11 @@ async def leave_room(room_id: str, player_id: str) -> dict[str, Any]:
 
     if room.phase == "waiting":
         # 等待阶段按当前玩家数同步总回合，避免页面展示与实际规则不一致。
-        room.total_rounds = resolve_total_rounds_by_player_count(remaining, fallback=room.total_rounds)
+        room.total_rounds = resolve_total_rounds_by_player_count(
+            remaining,
+            fallback=room.total_rounds,
+            max_rounds=getattr(room.config, "max_rounds", MAX_TOTAL_ROUNDS),
+        )
         room.config.rounds_per_game = room.total_rounds
         await room.save()
 
@@ -449,7 +467,11 @@ async def kick_player(room_id: str, player_id: str, requester_id: str) -> dict[s
 
     if room.phase == "waiting":
         remaining = await GamePlayer.find({"room_id": room.room_id}).count()
-        room.total_rounds = resolve_total_rounds_by_player_count(remaining, fallback=room.total_rounds)
+        room.total_rounds = resolve_total_rounds_by_player_count(
+            remaining,
+            fallback=room.total_rounds,
+            max_rounds=getattr(room.config, "max_rounds", MAX_TOTAL_ROUNDS),
+        )
         room.config.rounds_per_game = room.total_rounds
         await room.save()
 

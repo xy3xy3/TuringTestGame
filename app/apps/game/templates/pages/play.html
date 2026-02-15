@@ -210,6 +210,12 @@ let countdownRemaining = 0;
 let countdownTotal = phaseDurations.questioning;  // 当前阶段总时长
 let countdownInterval = null;
 
+// 草稿同步相关
+let questionDraftTimer = null;
+let answerDraftTimer = null;
+let lastQuestionDraft = '';
+let lastAnswerDraft = '';
+
 // SSE 连接
 let eventSource = null;
 
@@ -301,6 +307,68 @@ function setRoundDisplay(roundNumber, totalRoundNumber) {
   }
 }
 
+function resetDraftSyncState() {
+  if (questionDraftTimer) {
+    clearTimeout(questionDraftTimer);
+    questionDraftTimer = null;
+  }
+  if (answerDraftTimer) {
+    clearTimeout(answerDraftTimer);
+    answerDraftTimer = null;
+  }
+  lastQuestionDraft = '';
+  lastAnswerDraft = '';
+}
+
+async function syncDraftNow(draftType, content) {
+  if (!currentRoundId) return;
+  const normalizedType = String(draftType || '').trim().toLowerCase();
+  if (!normalizedType) return;
+  try {
+    await fetch(`/game/${roomId}/draft`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `round_id=${encodeURIComponent(currentRoundId)}&draft_type=${encodeURIComponent(normalizedType)}&content=${encodeURIComponent(content || '')}`
+    });
+  } catch (error) {
+    console.warn('草稿同步失败：', error);
+  }
+}
+
+function scheduleQuestionDraftSync() {
+  if (!isCurrentInterrogator || currentPhase !== 'questioning' || !currentRoundId) return;
+  const questionInput = document.getElementById('question-input');
+  if (!questionInput) return;
+
+  if (questionDraftTimer) {
+    clearTimeout(questionDraftTimer);
+  }
+  questionDraftTimer = setTimeout(async () => {
+    questionDraftTimer = null;
+    const draft = questionInput.value || '';
+    if (draft === lastQuestionDraft) return;
+    lastQuestionDraft = draft;
+    await syncDraftNow('question', draft);
+  }, 250);
+}
+
+function scheduleAnswerDraftSync() {
+  if (!isCurrentSubject || currentPhase !== 'answering' || !currentRoundId) return;
+  const answerInput = document.getElementById('answer-input');
+  if (!answerInput) return;
+
+  if (answerDraftTimer) {
+    clearTimeout(answerDraftTimer);
+  }
+  answerDraftTimer = setTimeout(async () => {
+    answerDraftTimer = null;
+    const draft = answerInput.value || '';
+    if (draft === lastAnswerDraft) return;
+    lastAnswerDraft = draft;
+    await syncDraftNow('answer', draft);
+  }, 250);
+}
+
 function connectSSE() {
   eventSource = new EventSource(`/game/${roomId}/events`);
 
@@ -321,10 +389,13 @@ function connectSSE() {
     // 重置显示
     document.getElementById('question-text').textContent = '等待提问...';
     document.getElementById('answer-text').textContent = '等待回答...';
+    document.getElementById('question-input').value = '';
+    document.getElementById('answer-input').value = '';
     document.getElementById('answer-content').classList.add('hidden');
     document.getElementById('loading-area').classList.add('hidden');
     myLastVote = '';
     resetRoundFeedback();
+    resetDraftSyncState();
 
     updatePhaseDisplay('questioning');
   });
@@ -346,10 +417,13 @@ function connectSSE() {
     // 重置显示
     document.getElementById('question-text').textContent = '等待提问...';
     document.getElementById('answer-text').textContent = '等待回答...';
+    document.getElementById('question-input').value = '';
+    document.getElementById('answer-input').value = '';
     document.getElementById('answer-content').classList.add('hidden');
     document.getElementById('loading-area').classList.add('hidden');
     myLastVote = '';
     resetRoundFeedback();
+    resetDraftSyncState();
 
     updatePhaseDisplay('questioning');
   });
@@ -360,7 +434,11 @@ function connectSSE() {
     updatePhaseDisplay('answering');
   });
 
-  eventSource.addEventListener('answer_phase', () => {
+  eventSource.addEventListener('answer_phase', (e) => {
+    const data = JSON.parse(e.data || '{}');
+    if (data.question) {
+      document.getElementById('question-text').textContent = data.question;
+    }
     updatePhaseDisplay('answering');
   });
 
@@ -426,6 +504,14 @@ function connectSSE() {
 
 function updatePhaseDisplay(phase) {
   currentPhase = phase;
+  if (phase !== 'questioning' && questionDraftTimer) {
+    clearTimeout(questionDraftTimer);
+    questionDraftTimer = null;
+  }
+  if (phase !== 'answering' && answerDraftTimer) {
+    clearTimeout(answerDraftTimer);
+    answerDraftTimer = null;
+  }
   
   // 阶段变化时停止本地倒计时（结果揭晓阶段不需要倒计时）
   if (phase === 'revealed') {
@@ -553,6 +639,9 @@ async function submitQuestion() {
   const question = input.value.trim();
   if (!question) return;
 
+  lastQuestionDraft = question;
+  await syncDraftNow('question', question);
+
   // 立即隐藏提问输入区域，防止重复点击
   document.getElementById('question-input-area').classList.add('hidden');
   document.getElementById('wait-area').classList.remove('hidden');
@@ -588,6 +677,7 @@ document.addEventListener('click', function(e) {
 function showHumanAnswer() {
   document.getElementById('answer-choice-area').classList.add('hidden');
   document.getElementById('answer-input-area').classList.remove('hidden');
+  scheduleAnswerDraftSync();
 }
 
 async function submitAIAnswer() {
@@ -609,6 +699,9 @@ async function submitHumanAnswer() {
   const input = document.getElementById('answer-input');
   const answer = input.value.trim();
   if (!answer) return;
+
+  lastAnswerDraft = answer;
+  await syncDraftNow('answer', answer);
 
   // 立即隐藏输入区域，防止重复点击
   document.getElementById('answer-input-area').classList.add('hidden');
@@ -742,13 +835,40 @@ function lockAnswerInputPaste() {
   });
 }
 
+function flushDraftOnBeforeUnload() {
+  if (!currentRoundId || typeof navigator.sendBeacon !== 'function') return;
+  const params = new URLSearchParams();
+  if (isCurrentInterrogator && currentPhase === 'questioning') {
+    const questionDraft = document.getElementById('question-input')?.value || '';
+    if (questionDraft !== lastQuestionDraft) {
+      params.set('round_id', currentRoundId);
+      params.set('draft_type', 'question');
+      params.set('content', questionDraft);
+      navigator.sendBeacon(`/game/${roomId}/draft`, params);
+      return;
+    }
+  }
+  if (isCurrentSubject && currentPhase === 'answering') {
+    const answerDraft = document.getElementById('answer-input')?.value || '';
+    if (answerDraft !== lastAnswerDraft) {
+      params.set('round_id', currentRoundId);
+      params.set('draft_type', 'answer');
+      params.set('content', answerDraft);
+      navigator.sendBeacon(`/game/${roomId}/draft`, params);
+    }
+  }
+}
+
 // 页面加载时先获取状态，再连接 SSE
 lockAnswerInputPaste();
+document.getElementById('question-input').addEventListener('input', scheduleQuestionDraftSync);
+document.getElementById('answer-input').addEventListener('input', scheduleAnswerDraftSync);
 initGameState().then(() => {
   connectSSE();
 });
 
 window.addEventListener('beforeunload', () => {
+  flushDraftOnBeforeUnload();
   stopLocalCountdown();
   if (eventSource) {
     eventSource.close();

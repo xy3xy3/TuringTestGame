@@ -224,6 +224,7 @@ class GameManager:
         room.total_rounds = game_room_service.resolve_total_rounds_by_player_count(
             len(players),
             fallback=room.total_rounds,
+            max_rounds=getattr(room.config, "max_rounds", game_room_service.MAX_TOTAL_ROUNDS),
         )
         room.config.rounds_per_game = room.total_rounds
         # 开始前同步系统配置中的阶段时长，避免房间创建后改配置不生效。
@@ -348,17 +349,25 @@ class GameManager:
             # 检查是否已提交问题
             game_round = await GameRound.get(PydanticObjectId(round_id))
             if game_round and not game_round.question:
-                # 时间到但没提交问题，随机生成一个默认问题
-                default_questions = [
-                    "请介绍一下你自己",
-                    "你今天做了什么?",
-                    "你喜欢什么颜色?",
-                    "你多大了?",
-                    "你喜欢吃什么?",
-                ]
-                game_round.question = random.choice(default_questions)
+                # 时间到强制提交：优先使用提问者已输入草稿；没有草稿再回退默认问题。
+                draft_question = str(game_round.question_draft or "").strip()
+                if draft_question:
+                    game_round.question = draft_question
+                else:
+                    default_questions = [
+                        "请介绍一下你自己",
+                        "你今天做了什么?",
+                        "你喜欢什么颜色?",
+                        "你多大了?",
+                        "你喜欢吃什么?",
+                    ]
+                    game_round.question = random.choice(default_questions)
                 game_round.question_at = datetime.now(timezone.utc)
                 await game_round.save()
+                await sse_manager.publish(room_id, "new_question", {
+                    "question": game_round.question,
+                    "interrogator_id": game_round.interrogator_id,
+                })
 
             # 进入回答阶段
             await self._start_answer_phase(room_id, round_id)
@@ -388,19 +397,60 @@ class GameManager:
         if game_round.question:
             return {"success": False, "error": "问题已提交"}
 
-        game_round.question = question
+        game_round.question = question.strip()
+        game_round.question_draft = ""
         game_round.question_at = datetime.now(timezone.utc)
         await game_round.save()
 
         # 通知所有玩家
         await sse_manager.publish(room_id, "new_question", {
-            "question": question,
+            "question": game_round.question,
             "interrogator_id": player_id,
         })
 
         # 进入回答阶段
         await self._start_answer_phase(room_id, round_id)
 
+        return {"success": True}
+
+    async def save_round_draft(
+        self,
+        room_id: str,
+        round_id: str,
+        player_id: str,
+        draft_type: str,
+        content: str,
+    ) -> dict[str, Any]:
+        """保存当前回合草稿，用于倒计时结束时强制提交。"""
+        game_round = await GameRound.get(PydanticObjectId(round_id))
+        if not game_round:
+            return {"success": False, "error": "回合不存在"}
+        room = await game_room_service.get_room_by_id(room_id)
+        if not room or game_round.room_id != room.room_id:
+            return {"success": False, "error": "房间不存在或回合不匹配"}
+
+        normalized_type = str(draft_type or "").strip().lower()
+        normalized_content = str(content or "")
+        if normalized_type == "question":
+            if game_round.status != "questioning":
+                return {"success": False, "error": "当前不在提问阶段"}
+            if game_round.interrogator_id != player_id:
+                return {"success": False, "error": "只有提问者可以保存问题草稿"}
+            if game_round.question:
+                return {"success": False, "error": "问题已提交"}
+            game_round.question_draft = normalized_content[:1000]
+        elif normalized_type == "answer":
+            if game_round.status != "answering":
+                return {"success": False, "error": "当前不在回答阶段"}
+            if game_round.subject_id != player_id:
+                return {"success": False, "error": "只有被测者可以保存回答草稿"}
+            if game_round.answer:
+                return {"success": False, "error": "回答已提交"}
+            game_round.answer_draft = normalized_content[:2000]
+        else:
+            return {"success": False, "error": "无效的草稿类型"}
+
+        await game_round.save()
         return {"success": True}
 
     async def _start_answer_phase(self, room_id: str, round_id: str):
@@ -444,8 +494,10 @@ class GameManager:
             # 检查是否已提交回答
             game_round = await GameRound.get(PydanticObjectId(round_id))
             if game_round and not game_round.answer:
-                # 时间到但没提交回答，使用默认回答
-                game_round.answer = "（未作答）"
+                # 时间到强制提交：优先使用被测者已输入草稿；无草稿时回退默认占位回答。
+                draft_answer = str(game_round.answer_draft or "").strip()
+                game_round.answer = draft_answer or "（未作答）"
+                game_round.answer_draft = ""
                 game_round.answer_type = "human"
                 game_round.answer_submitted_at = datetime.now(timezone.utc)
                 await game_round.save()
@@ -521,13 +573,15 @@ class GameManager:
 
             game_round.answer = result["content"]
             game_round.answer_type = "ai"
+            game_round.answer_draft = ""
             game_round.used_ai_model_id = subject.ai_model_id
         else:
             # 手动回答
             if not answer_content.strip():
                 return {"success": False, "error": "回答内容不能为空"}
-            game_round.answer = answer_content
+            game_round.answer = answer_content.strip()
             game_round.answer_type = "human"
+            game_round.answer_draft = ""
 
         game_round.answer_submitted_at = datetime.now(timezone.utc)
         await game_round.save()

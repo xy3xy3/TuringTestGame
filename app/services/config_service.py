@@ -366,6 +366,59 @@ async def save_game_time_config(config: dict[str, int]) -> dict[str, int]:
     return await get_game_time_config()
 
 
+# 游戏房间规则配置（房间人数上限、回合上限）
+GAME_RULE_CONFIG_GROUP = "game_rule"
+GAME_RULE_CONFIG_KEYS = {
+    "max_room_players": ("最大房间玩家数量", 8, 2, 16),
+    "max_rounds": ("最大回合数", 20, 1, 20),
+}
+
+
+def _normalize_game_rule_config(payload: dict[str, object]) -> dict[str, int]:
+    """规范化游戏房间规则配置。"""
+    normalized: dict[str, int] = {}
+    for key, (_name, default, minimum, maximum) in GAME_RULE_CONFIG_KEYS.items():
+        normalized[key] = _to_int(payload.get(key), default=default, minimum=minimum, maximum=maximum)
+    # 兜底保证房间人数至少为 2，回合至少为 1。
+    normalized["max_room_players"] = max(2, normalized["max_room_players"])
+    normalized["max_rounds"] = max(1, normalized["max_rounds"])
+    return normalized
+
+
+async def get_game_rule_config() -> dict[str, int]:
+    """获取游戏房间规则配置。"""
+    payload: dict[str, object] = {}
+    for key in GAME_RULE_CONFIG_KEYS:
+        item = await find_config_item(GAME_RULE_CONFIG_GROUP, key)
+        if item:
+            payload[key] = item.value
+    return _normalize_game_rule_config(payload)
+
+
+async def save_game_rule_config(payload: dict[str, object]) -> dict[str, int]:
+    """保存游戏房间规则配置。"""
+    normalized = _normalize_game_rule_config(payload)
+    for key, value in normalized.items():
+        name, _default, minimum, maximum = GAME_RULE_CONFIG_KEYS[key]
+        item = await find_config_item(GAME_RULE_CONFIG_GROUP, key)
+        if item:
+            item.value = str(value)
+            item.name = name
+            item.description = f"游戏房间规则：{name}（范围 {minimum}-{maximum}）"
+            item.updated_at = utc_now()
+            await item.save()
+        else:
+            await ConfigItem(
+                key=key,
+                name=name,
+                value=str(value),
+                group=GAME_RULE_CONFIG_GROUP,
+                description=f"游戏房间规则：{name}（范围 {minimum}-{maximum}）",
+                updated_at=utc_now(),
+            ).insert()
+    return normalized
+
+
 # 游戏背景音乐配置（按阶段）
 GAME_BGM_CONFIG_GROUP = "game_bgm"
 GAME_BGM_PHASE_KEYS: dict[str, str] = {

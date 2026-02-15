@@ -22,7 +22,9 @@ class GameRound(Document):
     interrogator_id: str = Field(..., max_length=32)
     subject_id: str = Field(..., max_length=32)
     question: str = Field(default="", max_length=1000)
+    question_draft: str = Field(default="", max_length=1000)
     answer: str = Field(default="", max_length=2000)
+    answer_draft: str = Field(default="", max_length=2000)
     answer_type: Literal["human", "ai"] = "human"
     used_ai_model_id: str | None = Field(default=None, max_length=32)
     question_at: datetime | None = None

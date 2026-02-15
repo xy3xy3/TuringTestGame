@@ -31,6 +31,7 @@ class GameConfig(BaseModel):
     reveal_delay: int = Field(default=3, ge=1, le=10)
     min_players: int = Field(default=2, ge=2, le=16)
     max_players: int = Field(default=8, ge=2, le=16)
+    max_rounds: int = Field(default=20, ge=1, le=20)
     rounds_per_game: int = Field(default=0, ge=0, le=20)
     role_pity_gap_threshold: int = Field(default=2, ge=1, le=10)
     role_weight_base: int = Field(default=100, ge=1, le=10000)
