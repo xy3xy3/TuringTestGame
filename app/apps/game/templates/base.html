@@ -109,6 +109,73 @@
   <script src="/static/js/app.js" defer></script>
   <script>
     (() => {
+      const NICKNAME_STORAGE_KEY = "ttg_player_nickname";
+
+      // 读取并清洗本地昵称，只接受 2~32 字符的有效值。
+      const getStoredNickname = () => {
+        const value = window.localStorage.getItem(NICKNAME_STORAGE_KEY);
+        const nickname = String(value || "").trim();
+        if (nickname.length < 2 || nickname.length > 32) return "";
+        return nickname;
+      };
+
+      // 将昵称持久化到 localStorage，便于后续页面自动回填。
+      const persistNickname = (value) => {
+        const nickname = String(value || "").trim();
+        if (nickname.length < 2 || nickname.length > 32) return;
+        window.localStorage.setItem(NICKNAME_STORAGE_KEY, nickname);
+      };
+
+      // 给页面中的昵称输入框自动回填，并触发 input 以同步 Alpine/校验状态。
+      const hydrateNicknameInputs = (root) => {
+        const nickname = getStoredNickname();
+        if (!nickname) return;
+        const host = root instanceof HTMLElement || root instanceof Document ? root : document;
+        const inputs = host.querySelectorAll('input[name="nickname"]:not([type="hidden"])');
+        inputs.forEach((input) => {
+          if (!(input instanceof HTMLInputElement)) return;
+          if (String(input.value || "").trim()) return;
+          input.value = nickname;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      };
+
+      document.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (target.name !== "nickname" || target.type === "hidden") return;
+        persistNickname(target.value);
+      });
+
+      document.addEventListener("submit", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLFormElement)) return;
+        const nicknameInput = target.querySelector('input[name="nickname"]');
+        if (!(nicknameInput instanceof HTMLInputElement)) return;
+        persistNickname(nicknameInput.value);
+      }, true);
+
+      // 先回填一次，覆盖普通页面和首屏渲染场景。
+      hydrateNicknameInputs(document);
+
+      // Alpine 初始化后再回填一次，避免 x-model 首次渲染重置输入值。
+      document.addEventListener("alpine:initialized", () => {
+        hydrateNicknameInputs(document);
+      });
+
+      // HTMX 局部刷新后对新节点再次回填昵称。
+      document.addEventListener("htmx:afterSwap", (event) => {
+        const target = event.target;
+        if (target instanceof HTMLElement) {
+          hydrateNicknameInputs(target);
+          return;
+        }
+        hydrateNicknameInputs(document);
+      });
+    })();
+  </script>
+  <script>
+    (() => {
       const tracks = {{ request.state.game_bgm_config | default({}, true) | tojson }};
       const initialStage = {{ bgm_stage | default("", true) | tojson }};
       const audioEl = document.getElementById("game-bgm-player");
