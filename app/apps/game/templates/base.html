@@ -31,15 +31,39 @@
   {% block content %}{% endblock %}
 
   <audio id="game-bgm-player" preload="none" loop class="hidden"></audio>
-  <button
-    id="bgm-toggle-btn"
-    type="button"
-    class="fixed right-4 top-4 z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
-    aria-label="切换背景音乐"
-  >
-    <i class="fa-solid fa-volume-xmark"></i>
-    <span>音乐关闭</span>
-  </button>
+  <div class="fixed right-4 top-4 z-40 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+    <button
+      id="bgm-toggle-btn"
+      type="button"
+      class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
+      aria-label="切换背景音乐"
+    >
+      <i class="fa-solid fa-volume-xmark"></i>
+      <span>音乐关闭</span>
+    </button>
+    <div
+      class="w-44 rounded-xl border border-white/15 bg-slate-900/70 px-3 py-2 text-white backdrop-blur"
+      aria-label="背景音乐音量设置"
+    >
+      <div class="flex items-center justify-between text-[11px] text-purple-100/90">
+        <span>音乐音量</span>
+        <span id="bgm-volume-text">60%</span>
+      </div>
+      <div class="mt-1 flex items-center gap-2">
+        <i class="fa-solid fa-volume-low text-xs text-purple-100/80" aria-hidden="true"></i>
+        <input
+          id="bgm-volume-range"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="60"
+          class="h-1.5 w-full cursor-pointer accent-purple-400"
+          aria-label="设置背景音乐音量"
+        />
+      </div>
+    </div>
+  </div>
 
   {% set footer_text = request.state.footer_copyright_text | default("TuringTestGame", true) %}
   {% set footer_url = request.state.footer_copyright_url | default("https://github.com/xy3xy3/TuringTestGame", true) %}
@@ -89,17 +113,50 @@
       const initialStage = {{ bgm_stage | default("", true) | tojson }};
       const audioEl = document.getElementById("game-bgm-player");
       const toggleBtn = document.getElementById("bgm-toggle-btn");
-      if (!audioEl || !toggleBtn) return;
+      const volumeRange = document.getElementById("bgm-volume-range");
+      const volumeText = document.getElementById("bgm-volume-text");
+      if (!audioEl || !toggleBtn || !volumeRange || !volumeText) return;
 
       const iconEl = toggleBtn.querySelector("i");
       const textEl = toggleBtn.querySelector("span");
       let enabled = window.localStorage.getItem("ttg_bgm_enabled") !== "0";
+      // 将本地存储值统一归一化为 0~1，兼容历史百分比存储值。
+      const normalizeVolume = (rawValue) => {
+        const parsed = Number(rawValue);
+        if (!Number.isFinite(parsed)) return 0.6;
+        if (parsed > 1) {
+          if (parsed <= 100) {
+            return Math.max(0, Math.min(1, parsed / 100));
+          }
+          return 0.6;
+        }
+        return Math.max(0, Math.min(1, parsed));
+      };
+      let volume = normalizeVolume(window.localStorage.getItem("ttg_bgm_volume"));
       let currentStage = "";
       let pendingUserGesture = false;
 
+      // 同步播放器实际音量，确保切歌后也沿用当前设置。
+      const applyVolume = () => {
+        audioEl.volume = volume;
+      };
+
+      // 刷新音量滑块和百分比显示。
+      const updateVolumeUi = () => {
+        const percent = Math.round(volume * 100);
+        volumeRange.value = String(percent);
+        volumeText.textContent = `${percent}%`;
+      };
+
       const updateToggleUi = () => {
         if (iconEl) {
-          iconEl.className = enabled ? "fa-solid fa-volume-high" : "fa-solid fa-volume-xmark";
+          if (!enabled) {
+            iconEl.className = "fa-solid fa-volume-xmark";
+          } else if (volume < 0.5) {
+            iconEl.className = "fa-solid fa-volume-low";
+          } else {
+            iconEl.className = "fa-solid fa-volume-high";
+          }
         }
         if (textEl) {
           textEl.textContent = enabled ? "音乐开启" : "音乐关闭";
@@ -131,6 +188,7 @@
           audioEl.setAttribute("src", nextSrc);
           audioEl.load();
         }
+        applyVolume();
         tryPlayCurrent();
       };
 
@@ -150,6 +208,21 @@
         tryPlayCurrent();
       });
 
+      volumeRange.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        volume = normalizeVolume(Number(target.value) / 100);
+        window.localStorage.setItem("ttg_bgm_volume", volume.toFixed(2));
+        applyVolume();
+        updateVolumeUi();
+        updateToggleUi();
+        // 调整音量属于用户手势，可尝试恢复受限的自动播放。
+        if (enabled) {
+          pendingUserGesture = false;
+          tryPlayCurrent();
+        }
+      });
+
       const onUserGesture = () => {
         if (!pendingUserGesture || !enabled) return;
         pendingUserGesture = false;
@@ -158,6 +231,8 @@
       window.addEventListener("pointerdown", onUserGesture, { passive: true });
       window.addEventListener("keydown", onUserGesture, { passive: true });
 
+      applyVolume();
+      updateVolumeUi();
       updateToggleUi();
 
       // 先处理页面设置的默认阶段。
