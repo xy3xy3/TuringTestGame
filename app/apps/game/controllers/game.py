@@ -146,6 +146,7 @@ async def create_room(request: Request) -> HTMLResponse:
     form_data = await request.form()
     nickname = str(form_data.get("nickname", "")).strip()
     password = str(form_data.get("password", "")).strip()
+    bonus_scoring_enabled = str(form_data.get("bonus_scoring_enabled", "")).strip().lower() in {"1", "true", "on", "yes"}
 
     if not nickname:
         return HTMLResponse(content='<div class="text-red-400">请输入昵称</div>')
@@ -153,6 +154,7 @@ async def create_room(request: Request) -> HTMLResponse:
     result = await game_room_service.create_room(
         nickname=nickname,
         password=password,
+        bonus_scoring_enabled=bonus_scoring_enabled,
     )
 
     if result["success"]:
@@ -420,6 +422,32 @@ async def start_game(request: Request, room_id: str) -> HTMLResponse:
         # 成功启动游戏，返回跳转脚本
         return HTMLResponse(content='<script>window.location.href="/game/' + room_id + '/setup";</script>')
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
+
+
+@router.post("/{room_id}/bonus-scoring", response_class=HTMLResponse)
+async def update_bonus_scoring(request: Request, room_id: str) -> HTMLResponse:
+    """更新房间附加给分机制开关（仅房主可操作）。"""
+    room = await game_room_service.get_room_by_id(room_id)
+    if not room:
+        return HTMLResponse(content='<div class="text-red-400">房间不存在</div>')
+
+    player = await _get_authed_player(request, room)
+    if not player:
+        return HTMLResponse(content='<div class="text-red-400">未登录</div>')
+
+    form_data = await request.form()
+    enabled = str(form_data.get("bonus_scoring_enabled", "")).strip().lower() in {"1", "true", "on", "yes"}
+
+    result = await game_room_service.update_bonus_scoring_enabled(
+        room_id=room_id,
+        requester_id=str(player.id),
+        enabled=enabled,
+    )
+    if result["success"]:
+        status_text = "已开启" if result.get("bonus_scoring_enabled") else "已关闭"
+        return HTMLResponse(content=f'<div class="text-green-400">附加给分机制{status_text}</div>')
+
+    return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "更新失败")}</div>')
 
 
 @router.post("/{room_id}/kick/{player_id}", response_class=HTMLResponse)

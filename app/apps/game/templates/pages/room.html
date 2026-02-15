@@ -33,6 +33,50 @@
         </div>
         <p class="text-purple-300 text-xs mt-2">复制链接分享给好友，好友点击即可快速加入房间</p>
       </div>
+
+      <div class="mt-4 pt-4 border-t border-white/10">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm text-purple-200">附加给分机制</p>
+            <p id="bonus-scoring-desc" class="text-xs text-purple-300">
+              {% if room.config.bonus_scoring_enabled %}
+              已开启：提问者/被测者满足条件可获得额外加分
+              {% else %}
+              未开启：仅按投票结果计分
+              {% endif %}
+            </p>
+          </div>
+          <span
+            id="bonus-scoring-status"
+            class="inline-flex items-center rounded-full px-3 py-1 text-sm {% if room.config.bonus_scoring_enabled %}bg-green-500/20 text-green-300{% else %}bg-slate-500/20 text-slate-300{% endif %}"
+          >
+            {% if room.config.bonus_scoring_enabled %}已开启{% else %}未开启{% endif %}
+          </span>
+        </div>
+
+        {% if current_player and current_player.is_owner %}
+        <form
+          id="bonus-scoring-form"
+          class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          hx-post="/game/{{ room.id }}/bonus-scoring"
+          hx-target="#bonus-scoring-result"
+        >
+          <label class="inline-flex items-center gap-2 text-sm text-purple-100">
+            <input
+              id="bonus-scoring-toggle"
+              type="checkbox"
+              name="bonus_scoring_enabled"
+              value="true"
+              class="h-4 w-4 rounded border-white/20 bg-white/10 text-purple-500 focus:ring-purple-400"
+              {% if room.config.bonus_scoring_enabled %}checked{% endif %}
+            />
+            开启附加给分机制
+          </label>
+          <button type="submit" class="btn-primary sm:w-auto">保存给分设置</button>
+        </form>
+        <div id="bonus-scoring-result" class="mt-2 text-sm"></div>
+        {% endif %}
+      </div>
     </div>
 
     <!-- 玩家列表 -->
@@ -176,6 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const phaseEl = document.getElementById('room-phase');
     const currentRoundEl = document.getElementById('room-current-round');
     const totalRoundEl = document.getElementById('room-total-rounds');
+    const bonusStatusEl = document.getElementById('bonus-scoring-status');
+    const bonusDescEl = document.getElementById('bonus-scoring-desc');
+    const bonusToggleEl = document.getElementById('bonus-scoring-toggle');
     const currentPlayerId = getCurrentPlayerId();
 
     if (!currentPlayerId && !playerCountEl && !phaseEl && !currentRoundEl && !totalRoundEl) return;
@@ -196,6 +243,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (totalRounds !== undefined) {
               totalRoundEl.textContent = String(totalRounds);
             }
+          }
+          const bonusScoringEnabled = Boolean(data.room?.config?.bonus_scoring_enabled);
+          if (bonusStatusEl) {
+            bonusStatusEl.textContent = bonusScoringEnabled ? '已开启' : '未开启';
+            bonusStatusEl.classList.toggle('bg-green-500/20', bonusScoringEnabled);
+            bonusStatusEl.classList.toggle('text-green-300', bonusScoringEnabled);
+            bonusStatusEl.classList.toggle('bg-slate-500/20', !bonusScoringEnabled);
+            bonusStatusEl.classList.toggle('text-slate-300', !bonusScoringEnabled);
+          }
+          if (bonusDescEl) {
+            bonusDescEl.textContent = bonusScoringEnabled
+              ? '已开启：提问者/被测者满足条件可获得额外加分'
+              : '未开启：仅按投票结果计分';
+          }
+          if (bonusToggleEl) {
+            bonusToggleEl.checked = bonusScoringEnabled;
           }
 
           // 同步顶部玩家数量展示，避免仅刷新卡片时顶部人数不更新。
@@ -281,6 +344,11 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateReadyButtonState();
   });
 
+  eventSource.addEventListener('bonus_scoring_updated', (e) => {
+    console.log('SSE event: bonus_scoring_updated', e.data);
+    window.updateReadyButtonState();
+  });
+
   eventSource.addEventListener('game_starting', (e) => {
     console.log('SSE event: game_starting', e.data);
     window.location.href = `/game/${roomId}/setup`;
@@ -296,7 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.body.addEventListener('htmx:afterRequest', (evt) => {
     const path = evt.detail?.pathInfo?.requestPath || '';
-    if (!path.includes(`/game/${roomId}/ready`) && !path.includes(`/game/${roomId}/start`)) {
+    if (
+      !path.includes(`/game/${roomId}/ready`)
+      && !path.includes(`/game/${roomId}/start`)
+      && !path.includes(`/game/${roomId}/bonus-scoring`)
+    ) {
       return;
     }
     window.updateReadyButtonState();

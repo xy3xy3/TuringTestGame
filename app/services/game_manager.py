@@ -733,8 +733,12 @@ class GameManager:
             "round_number": game_round.round_number,
         }).to_list()
     
-        # 计算得分
-        scores = self._calculate_scores(game_round, votes)
+        # 计算得分（可选附加给分机制）
+        scores, bonus_summary = self._calculate_scores_with_bonus(
+            game_round,
+            votes,
+            enable_bonus_scoring=bool(getattr(room.config, "bonus_scoring_enabled", False)),
+        )
     
         # 更新玩家得分
         players = await game_room_service.get_players_in_room(room.room_id)
@@ -784,6 +788,7 @@ class GameManager:
             "scores": scores,
             "vote_details": vote_details,
             "player_scores": player_scores_list,
+            "bonus_summary": bonus_summary,
         })
 
         # 等待配置中的揭晓时长后开始下一轮/结束游戏。
@@ -796,8 +801,14 @@ class GameManager:
         else:
             await self._next_round(room_id)
 
-    def _calculate_scores(self, game_round: GameRound, votes: list[VoteRecord]) -> dict[str, int]:
-        """计算本回合得分。"""
+    def _calculate_scores_with_bonus(
+        self,
+        game_round: GameRound,
+        votes: list[VoteRecord],
+        *,
+        enable_bonus_scoring: bool = False,
+    ) -> tuple[dict[str, int], dict[str, Any]]:
+        """计算本回合得分，并在开启时处理附加给分机制。"""
         scores: dict[str, int] = {}
 
         # 新规则：所有“投票玩家”（提问者 + 陪审团）都按投票结果计分；被测者不计分。
@@ -807,9 +818,54 @@ class GameManager:
             if vote.vote == "skip":
                 continue
             if vote.vote == game_round.answer_type:
-                scores[vote.voter_id] = 50
+                scores[vote.voter_id] = scores.get(vote.voter_id, 0) + 50
             else:
-                scores[vote.voter_id] = -30
+                scores[vote.voter_id] = scores.get(vote.voter_id, 0) - 30
+
+        juror_votes = [
+            vote
+            for vote in votes
+            if vote.voter_id not in {game_round.subject_id, game_round.interrogator_id}
+        ]
+        all_jurors_correct = bool(juror_votes) and all(vote.vote == game_round.answer_type for vote in juror_votes)
+        all_jurors_fooled = bool(juror_votes) and all(
+            vote.vote in {"human", "ai"} and vote.vote != game_round.answer_type
+            for vote in juror_votes
+        )
+
+        interrogator_bonus = 0
+        subject_bonus = 0
+        if enable_bonus_scoring:
+            if all_jurors_correct:
+                interrogator_bonus = 50
+                scores[game_round.interrogator_id] = scores.get(game_round.interrogator_id, 0) + interrogator_bonus
+            if all_jurors_fooled:
+                subject_bonus = 50 if game_round.answer_type == "ai" else 25
+                scores[game_round.subject_id] = scores.get(game_round.subject_id, 0) + subject_bonus
+
+        bonus_summary = {
+            "enabled": bool(enable_bonus_scoring),
+            "juror_vote_count": len(juror_votes),
+            "all_jurors_correct": all_jurors_correct,
+            "all_jurors_fooled": all_jurors_fooled,
+            "interrogator_bonus": interrogator_bonus,
+            "subject_bonus": subject_bonus,
+        }
+        return scores, bonus_summary
+
+    def _calculate_scores(
+        self,
+        game_round: GameRound,
+        votes: list[VoteRecord],
+        *,
+        enable_bonus_scoring: bool = False,
+    ) -> dict[str, int]:
+        """兼容旧调用：仅返回得分映射。"""
+        scores, _ = self._calculate_scores_with_bonus(
+            game_round,
+            votes,
+            enable_bonus_scoring=enable_bonus_scoring,
+        )
         return scores
 
     async def _next_round(self, room_id: str):

@@ -37,6 +37,7 @@ class GameConfig(BaseModel):
     role_weight_base: int = Field(default=100, ge=1, le=10000)
     role_weight_deficit_step: int = Field(default=40, ge=0, le=10000)
     role_weight_zero_bonus: int = Field(default=60, ge=0, le=10000)
+    bonus_scoring_enabled: bool = Field(default=False)
 
 
 class GameRoom(Document):

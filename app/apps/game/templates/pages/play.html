@@ -176,15 +176,36 @@
       </div>
       <div>
         <h4 class="text-white font-semibold mb-2 flex items-center">
+          <i class="fa-solid fa-bolt text-yellow-300 mr-2"></i>附加给分机制
+        </h4>
+        {% if room.config.bonus_scoring_enabled %}
+        <ul class="space-y-1 ml-6 list-disc">
+          <li>提问者若让所有陪审团答对：<span class="text-green-400 font-bold">额外 +50分</span></li>
+          <li>被测者使用 AI 回答且骗过所有陪审团：<span class="text-green-400 font-bold">额外 +50分</span></li>
+          <li>被测者亲自回答且骗过所有陪审团：<span class="text-green-400 font-bold">额外 +25分</span></li>
+        </ul>
+        {% else %}
+        <p class="text-xs text-gray-400">本局未开启附加给分机制，仅按投票结果计分。</p>
+        {% endif %}
+      </div>
+      <div>
+        <h4 class="text-white font-semibold mb-2 flex items-center">
           <i class="fa-solid fa-user-shield text-pink-400 mr-2"></i>被测者
         </h4>
+        {% if room.config.bonus_scoring_enabled %}
+        <ul class="space-y-1 ml-6 list-disc">
+          <li>本轮不参与投票，默认得分为 <span class="text-gray-300 font-bold">0 分</span></li>
+          <li>满足附加机制条件时可获得额外加分</li>
+        </ul>
+        {% else %}
         <ul class="space-y-1 ml-6 list-disc">
           <li>本轮不参与投票与计分：<span class="text-gray-300 font-bold">固定 0 分</span></li>
           <li>仍正常参与回答流程，并等待其他玩家投票完成</li>
         </ul>
+        {% endif %}
       </div>
       <div class="bg-white/5 rounded-lg p-3 text-xs text-gray-400">
-        <p><i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>小贴士：提问者与陪审团都按投票结果计分，跳过不加减分。</p>
+        <p><i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>小贴士：跳过不加减分，附加机制仅在房主开启后生效。</p>
       </div>
     </div>
   </div>
@@ -193,6 +214,7 @@
 <script>
 const roomId = '{{ room.id }}';
 const playerId = '{{ player_id }}';
+const bonusScoringEnabled = {{ "true" if room.config.bonus_scoring_enabled else "false" }};
 let currentRound = {{ current_round }};
 let totalRounds = {{ room.total_rounds }};
 let currentPhase = 'waiting';
@@ -605,10 +627,19 @@ function renderRoundFeedback(result) {
   }
 
   const subjectId = String(result.subject_id || '');
+  const interrogatorId = String(result.interrogator_id || '');
 
   if (playerId === subjectId) {
     title.textContent = '你本轮作为被测者';
-    detail.textContent = `根据当前规则，被测者本轮不参与计分。${scoreText}`;
+    if (!bonusScoringEnabled) {
+      detail.textContent = `根据当前规则，被测者本轮不参与计分。${scoreText}`;
+    } else if (scoreDelta === 50) {
+      detail.textContent = `你使用 AI 回答骗过了所有陪审团，触发附加奖励。${scoreText}`;
+    } else if (scoreDelta === 25) {
+      detail.textContent = `你亲自回答骗过了所有陪审团，触发附加奖励。${scoreText}`;
+    } else {
+      detail.textContent = `附加给分机制已开启，但本轮未触发被测者奖励。${scoreText}`;
+    }
     card.classList.remove('hidden');
     return;
   }
@@ -626,8 +657,13 @@ function renderRoundFeedback(result) {
     detail.textContent = `你的判断：${voteLabel}。${scoreText}`;
   } else {
     const isCorrect = myVote ? Boolean(myVote.is_correct) : voteValue === result.subject_choice;
+    const baseScore = isCorrect ? 50 : -30;
+    const bonusScore = (playerId === interrogatorId && bonusScoringEnabled) ? scoreDelta - baseScore : 0;
     title.textContent = isCorrect ? '你本轮猜对了' : '你本轮猜错了';
     detail.textContent = `你的判断：${voteLabel}。${scoreText}`;
+    if (bonusScore > 0) {
+      detail.textContent += `（提问者附加奖励 +${bonusScore} 分）`;
+    }
   }
 
   card.classList.remove('hidden');

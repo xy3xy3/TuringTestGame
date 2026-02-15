@@ -90,6 +90,7 @@ async def create_room(
     min_players: int = 2,
     max_players: int = 8,
     total_rounds: int = 4,
+    bonus_scoring_enabled: bool = False,
 ) -> dict[str, Any]:
     """创建游戏房间。
 
@@ -100,6 +101,7 @@ async def create_room(
         min_players: 最少玩家数
         max_players: 最多玩家数（会受后台“最大房间玩家数量”配置约束）
         total_rounds: 总回合数基线（会按“min(最大回合数, 玩家数*2)”动态计算）
+        bonus_scoring_enabled: 是否开启附加给分机制
 
     Returns:
         {"success": True, "room": GameRoom, "player": GamePlayer, "token": "..."}
@@ -138,6 +140,7 @@ async def create_room(
         role_weight_base=role_balance_config.get("weight_base", 100),
         role_weight_deficit_step=role_balance_config.get("weight_deficit_step", 40),
         role_weight_zero_bonus=role_balance_config.get("weight_zero_bonus", 60),
+        bonus_scoring_enabled=bool(bonus_scoring_enabled),
     )
 
     # 创建房间（先创建，获取 room id 后再创建玩家）
@@ -404,6 +407,33 @@ async def update_player_setup(
     await player.save()
 
     return {"success": True}
+
+
+async def update_bonus_scoring_enabled(
+    room_id: str,
+    requester_id: str,
+    enabled: bool,
+) -> dict[str, Any]:
+    """更新房间附加给分机制开关（仅房主可在等待阶段修改）。"""
+    room = await get_room_by_id(room_id)
+    if not room:
+        return {"success": False, "error": "房间不存在"}
+
+    requester = await GamePlayer.find_one({"_id": PydanticObjectId(requester_id), "room_id": room.room_id})
+    if not requester or not requester.is_owner:
+        return {"success": False, "error": "只有房主可以修改给分机制"}
+
+    if room.phase != "waiting":
+        return {"success": False, "error": "游戏开始后不能修改给分机制"}
+
+    room.config.bonus_scoring_enabled = bool(enabled)
+    await room.save()
+
+    from app.services.game_manager import sse_manager
+    await sse_manager.publish(str(room.id), "bonus_scoring_updated", {
+        "bonus_scoring_enabled": room.config.bonus_scoring_enabled,
+    })
+    return {"success": True, "bonus_scoring_enabled": room.config.bonus_scoring_enabled}
 
 
 async def check_all_players_ready(room_id: str) -> dict[str, Any]:
