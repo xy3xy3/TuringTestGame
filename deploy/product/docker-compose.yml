@@ -5,6 +5,8 @@ services:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
     container_name: TuringTestGame-mongo
     restart: unless-stopped
+    networks:
+      - product_net
     volumes:
       - mongo_data:/data/db
 
@@ -12,6 +14,8 @@ services:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/redis:8.2.2-bookworm
     container_name: TuringTestGame-redis
     restart: unless-stopped
+    networks:
+      - product_net
     volumes:
       - redis_data:/data
 
@@ -29,6 +33,8 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "${APP_PORT:-8000}:8000"
+    networks:
+      - product_net
     depends_on:
       - mongo
       - redis
@@ -38,3 +44,7 @@ volumes:
     name: product_mongo_data
   redis_data:
     name: product_redis_data
+
+networks:
+  product_net:
+    name: product_net
