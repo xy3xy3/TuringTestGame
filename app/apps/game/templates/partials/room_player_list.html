@@ -10,11 +10,24 @@
         <p class="text-purple-300 text-sm">{% if p.is_owner %}房主{% endif %}</p>
       </div>
     </div>
-    <div class="text-right">
+    <div class="text-right flex flex-col items-end gap-2">
       {% if p.is_ready %}
       <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">已准备</span>
       {% else %}
       <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">等待中</span>
+      {% endif %}
+      {% if current_player and current_player.is_owner and (not p.is_owner) and (p.id|string != current_player.id|string) %}
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-lg border border-red-400/40 bg-red-500/20 px-3 py-1 text-sm text-red-300 transition hover:bg-red-500/30"
+        hx-post="/game/{{ room.id }}/kick/{{ p.id }}"
+        hx-confirm="确定要将 {{ p.nickname }} 踢出房间吗？"
+        hx-target="#kick-result"
+        hx-swap="innerHTML"
+      >
+        <i class="fa-solid fa-user-slash"></i>
+        踢出
+      </button>
       {% endif %}
     </div>
   </div>

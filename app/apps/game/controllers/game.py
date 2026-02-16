@@ -660,12 +660,16 @@ async def get_room_players(request: Request, room_id: str) -> HTMLResponse:
         return HTMLResponse(content="<p>房间不存在</p>")
 
     players = await game_room_service.get_players_in_room(room.room_id)
+    # partial 需要当前玩家信息来控制“踢人”按钮仅房主可见。
+    current_player = await _get_authed_player(request, room)
 
     return templates.TemplateResponse(
         "partials/room_player_list.html",
         {
             "request": request,
+            "room": room,
             "players": players,
+            "current_player": current_player,
         },
     )
 
