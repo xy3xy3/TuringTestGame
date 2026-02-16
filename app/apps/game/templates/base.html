@@ -15,6 +15,15 @@
     };
   </script>
   <style>
+    html, body {
+      min-height: 100%;
+      background-color: #0f172a;
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: none;
+    }
+    body {
+      min-height: 100dvh;
+    }
     .input {
       @apply w-full rounded-lg border border-slate-600 bg-slate-800/50 px-4 py-2 text-white placeholder-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20;
     }
@@ -27,7 +36,7 @@
   </style>
 </head>
 
-<body class="antialiased min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+<body class="antialiased min-h-screen max-w-full overflow-x-hidden overscroll-none bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
   {% block content %}{% endblock %}
 
   <audio id="game-bgm-player" preload="none" loop class="hidden"></audio>
@@ -35,7 +44,7 @@
     id="bgm-widget"
     class="fixed right-4 top-4 z-40 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 select-none"
   >
-    <div class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-slate-900/70 px-2 py-1 text-[11px] text-purple-100 backdrop-blur">
+    <div id="bgm-widget-toolbar" class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-slate-900/70 px-2 py-1 text-[11px] text-purple-100 backdrop-blur">
       <button
         id="bgm-drag-handle"
         type="button"
@@ -100,7 +109,7 @@
   <button
     id="bgm-show-btn"
     type="button"
-    class="fixed right-4 top-4 z-40 hidden rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
+    class="fixed right-4 top-4 z-40 hidden touch-none rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
     aria-label="显示音乐面板"
   >
     <i class="fa-solid fa-music mr-1"></i>
@@ -230,7 +239,8 @@
       const hideBtn = document.getElementById("bgm-hide-btn");
       const showBtn = document.getElementById("bgm-show-btn");
       const dragHandle = document.getElementById("bgm-drag-handle");
-      if (!audioEl || !widgetEl || !toggleBtn || !volumePanel || !volumeRange || !volumeText || !collapseBtn || !hideBtn || !showBtn || !dragHandle) return;
+      const dragToolbar = document.getElementById("bgm-widget-toolbar");
+      if (!audioEl || !widgetEl || !toggleBtn || !volumePanel || !volumeRange || !volumeText || !collapseBtn || !hideBtn || !showBtn || !dragHandle || !dragToolbar) return;
 
       const iconEl = toggleBtn.querySelector("i");
       const textEl = toggleBtn.querySelector("span");
@@ -256,6 +266,11 @@
       let isDragging = false;
       let dragOffsetX = 0;
       let dragOffsetY = 0;
+      let activePointerId = null;
+      let dragMode = "widget";
+      let dragStartClientX = 0;
+      let dragStartClientY = 0;
+      let suppressShowClickOnce = false;
       const defaultPosition = { right: 16, top: 16 };
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -274,16 +289,22 @@
         }
       };
 
-      // 将面板定位到指定坐标，且保证不超出屏幕边界。
-      const applyWidgetPosition = (left, top, persist = false) => {
-        const rect = widgetEl.getBoundingClientRect();
+      const applyAbsolutePosition = (element, left, top) => {
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
+        element.style.right = "auto";
+      };
+
+      // 将悬浮控件定位到指定坐标，且保证不超出屏幕边界。
+      const applyFloatingPosition = (left, top, persist = false, mode = "widget") => {
+        const targetEl = mode === "show" ? showBtn : widgetEl;
+        const rect = targetEl.getBoundingClientRect();
         const maxLeft = Math.max(0, window.innerWidth - rect.width);
         const maxTop = Math.max(0, window.innerHeight - rect.height);
         const nextLeft = clamp(Math.round(left), 0, maxLeft);
         const nextTop = clamp(Math.round(top), 0, maxTop);
-        widgetEl.style.left = `${nextLeft}px`;
-        widgetEl.style.top = `${nextTop}px`;
-        widgetEl.style.right = "auto";
+        applyAbsolutePosition(widgetEl, nextLeft, nextTop);
+        applyAbsolutePosition(showBtn, nextLeft, nextTop);
         if (persist) {
           window.localStorage.setItem("ttg_bgm_widget_pos", JSON.stringify({ left: nextLeft, top: nextTop }));
         }
@@ -293,12 +314,15 @@
       const restoreWidgetPosition = () => {
         const stored = readStoredPosition();
         if (stored) {
-          applyWidgetPosition(stored.left, stored.top);
+          applyFloatingPosition(stored.left, stored.top);
           return;
         }
         widgetEl.style.left = "auto";
         widgetEl.style.right = `${defaultPosition.right}px`;
         widgetEl.style.top = `${defaultPosition.top}px`;
+        showBtn.style.left = "auto";
+        showBtn.style.right = `${defaultPosition.right}px`;
+        showBtn.style.top = `${defaultPosition.top}px`;
       };
 
       // 根据隐藏状态刷新显示，隐藏后保留一个轻量按钮方便快速恢复。
@@ -411,44 +435,81 @@
       };
 
       // 拖拽开始：记录鼠标与面板左上角偏移，后续移动即可平滑跟手。
-      const startDrag = (clientX, clientY) => {
-        if (isHidden) return;
-        const rect = widgetEl.getBoundingClientRect();
+      const startDrag = (clientX, clientY, mode = "widget") => {
+        dragMode = mode;
+        const targetEl = mode === "show" ? showBtn : widgetEl;
+        const rect = targetEl.getBoundingClientRect();
         dragOffsetX = clientX - rect.left;
         dragOffsetY = clientY - rect.top;
+        dragStartClientX = clientX;
+        dragStartClientY = clientY;
         isDragging = true;
       };
 
       // 拖拽进行中：持续更新面板坐标并实时裁剪到可视区域。
       const moveDrag = (clientX, clientY) => {
         if (!isDragging) return;
-        applyWidgetPosition(clientX - dragOffsetX, clientY - dragOffsetY);
+        const movedX = Math.abs(clientX - dragStartClientX);
+        const movedY = Math.abs(clientY - dragStartClientY);
+        if (movedX >= 3 || movedY >= 3) {
+          suppressShowClickOnce = dragMode === "show";
+        }
+        applyFloatingPosition(clientX - dragOffsetX, clientY - dragOffsetY, false, dragMode);
       };
 
       // 拖拽结束：写入 localStorage，刷新后仍保留用户上次摆放位置。
       const stopDrag = () => {
         if (!isDragging) return;
         isDragging = false;
-        const rect = widgetEl.getBoundingClientRect();
-        applyWidgetPosition(rect.left, rect.top, true);
+        const targetEl = dragMode === "show" ? showBtn : widgetEl;
+        const rect = targetEl.getBoundingClientRect();
+        applyFloatingPosition(rect.left, rect.top, true, dragMode);
       };
 
-      dragHandle.addEventListener("pointerdown", (event) => {
+      // 使用全局 pointermove/pointerup 兜底，避免移动端 setPointerCapture 失效时“缩小后无法拖动”。
+      const onWindowPointerMove = (event) => {
         if (!(event instanceof PointerEvent)) return;
-        startDrag(event.clientX, event.clientY);
+        if (!isDragging || (activePointerId !== null && event.pointerId !== activePointerId)) return;
+        moveDrag(event.clientX, event.clientY);
+        event.preventDefault();
+      };
+      const onWindowPointerUp = (event) => {
+        if (!(event instanceof PointerEvent)) return;
+        if (!isDragging || (activePointerId !== null && event.pointerId !== activePointerId)) return;
+        stopDrag();
+        activePointerId = null;
+      };
+
+      const beginDragByPointerEvent = (event, mode = "widget") => {
+        if (!(event instanceof PointerEvent)) return;
+        if (event.button !== undefined && event.button !== 0) return;
+        activePointerId = event.pointerId;
+        startDrag(event.clientX, event.clientY, mode);
         try {
-          dragHandle.setPointerCapture(event.pointerId);
+          const captureTarget = event.target instanceof Element ? event.target : dragToolbar;
+          if ("setPointerCapture" in captureTarget && typeof captureTarget.setPointerCapture === "function") {
+            captureTarget.setPointerCapture(event.pointerId);
+          }
         } catch {
           // 某些浏览器可能不支持指针捕获，这里忽略即可。
         }
-        event.preventDefault();
+        if (mode === "widget") {
+          event.preventDefault();
+        }
+      };
+
+      dragToolbar.addEventListener("pointerdown", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("#bgm-collapse-btn") || target.closest("#bgm-hide-btn")) return;
+        beginDragByPointerEvent(event, "widget");
       });
-      dragHandle.addEventListener("pointermove", (event) => {
-        if (!(event instanceof PointerEvent)) return;
-        moveDrag(event.clientX, event.clientY);
+      showBtn.addEventListener("pointerdown", (event) => {
+        beginDragByPointerEvent(event, "show");
       });
-      dragHandle.addEventListener("pointerup", stopDrag);
-      dragHandle.addEventListener("pointercancel", stopDrag);
+      window.addEventListener("pointermove", onWindowPointerMove, { passive: false });
+      window.addEventListener("pointerup", onWindowPointerUp);
+      window.addEventListener("pointercancel", onWindowPointerUp);
 
       collapseBtn.addEventListener("click", () => {
         isCollapsed = !isCollapsed;
@@ -458,15 +519,20 @@
         isHidden = true;
         applyHiddenState();
       });
-      showBtn.addEventListener("click", () => {
+      showBtn.addEventListener("click", (event) => {
+        if (suppressShowClickOnce) {
+          suppressShowClickOnce = false;
+          event.preventDefault();
+          return;
+        }
         isHidden = false;
         applyHiddenState();
       });
       window.addEventListener("resize", () => {
-        const rect = widgetEl.getBoundingClientRect();
-        if (isHidden) return;
-        if (widgetEl.style.left) {
-          applyWidgetPosition(rect.left, rect.top, true);
+        const rect = isHidden ? showBtn.getBoundingClientRect() : widgetEl.getBoundingClientRect();
+        const hasCustomPosition = Boolean(widgetEl.style.left || showBtn.style.left);
+        if (hasCustomPosition) {
+          applyFloatingPosition(rect.left, rect.top, true, isHidden ? "show" : "widget");
         }
       });
 
