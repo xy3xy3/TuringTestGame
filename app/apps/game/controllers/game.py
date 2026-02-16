@@ -673,9 +673,21 @@ async def get_room_players(request: Request, room_id: str) -> HTMLResponse:
 @router.get("/api/{room_id}/state")
 async def get_room_state(room_id: str) -> dict[str, Any]:
     """获取房间状态（API）。"""
+    from app.models.game_round import GameRound
+
     room = await game_room_service.get_room_by_id(room_id)
     if not room:
         return {"success": False, "error": "房间不存在"}
+
+    # playing 阶段优先使用最新回合号，避免 room.current_round 偶发滞后导致前端刷新后显示为第 1 回合。
+    resolved_current_round = int(room.current_round or 0)
+    if room.phase == "playing":
+        latest_round = await GameRound.find_one(
+            {"room_id": room.room_id},
+            sort=[("round_number", -1)],
+        )
+        if latest_round:
+            resolved_current_round = max(resolved_current_round, int(latest_round.round_number or 0))
 
     # 使用房间的 room_id（6位码）来查询玩家
     players = await game_room_service.get_players_in_room(room.room_id)
@@ -686,7 +698,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
             "id": str(room.id),
             "room_code": room.room_id,
             "phase": room.phase,
-            "current_round": room.current_round,
+            "current_round": resolved_current_round,
             "total_rounds": room.total_rounds,
             "config": room.config.model_dump(),
             "started_at": _to_utc_iso(room.started_at),
@@ -716,11 +728,11 @@ async def get_current_round(request: Request, room_id: str) -> dict[str, Any]:
     if room.phase != "playing":
         return {"success": False, "phase": room.phase, "error": "游戏未开始"}
 
-    # 获取当前回合（使用 6 位房间码查询）
-    current_round = await GameRound.find_one({
-        "room_id": room.room_id,
-        "round_number": room.current_round,
-    })
+    # 始终按 round_number 倒序取最新回合，避免 room.current_round 滞后导致刷新后回合号回退。
+    current_round = await GameRound.find_one(
+        {"room_id": room.room_id},
+        sort=[("round_number", -1)],
+    )
 
     if not current_round:
         return {"success": False, "error": "回合不存在"}

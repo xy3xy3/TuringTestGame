@@ -31,7 +31,39 @@
   {% block content %}{% endblock %}
 
   <audio id="game-bgm-player" preload="none" loop class="hidden"></audio>
-  <div class="fixed right-4 top-4 z-40 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+  <div
+    id="bgm-widget"
+    class="fixed right-4 top-4 z-40 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 select-none"
+  >
+    <div class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-slate-900/70 px-2 py-1 text-[11px] text-purple-100 backdrop-blur">
+      <button
+        id="bgm-drag-handle"
+        type="button"
+        class="inline-flex h-6 w-6 touch-none items-center justify-center rounded-full text-purple-100 transition hover:bg-white/10"
+        aria-label="拖动音乐面板"
+        title="拖动音乐面板"
+      >
+        <i class="fa-solid fa-up-down-left-right"></i>
+      </button>
+      <button
+        id="bgm-collapse-btn"
+        type="button"
+        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-purple-100 transition hover:bg-white/10"
+        aria-label="展开或收起音量面板"
+        title="展开或收起音量面板"
+      >
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+      <button
+        id="bgm-hide-btn"
+        type="button"
+        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-purple-100 transition hover:bg-white/10"
+        aria-label="隐藏音乐面板"
+        title="隐藏音乐面板"
+      >
+        <i class="fa-solid fa-eye-slash"></i>
+      </button>
+    </div>
     <button
       id="bgm-toggle-btn"
       type="button"
@@ -42,6 +74,7 @@
       <span>音乐关闭</span>
     </button>
     <div
+      id="bgm-volume-panel"
       class="w-44 rounded-xl border border-white/15 bg-slate-900/70 px-3 py-2 text-white backdrop-blur"
       aria-label="背景音乐音量设置"
     >
@@ -64,6 +97,15 @@
       </div>
     </div>
   </div>
+  <button
+    id="bgm-show-btn"
+    type="button"
+    class="fixed right-4 top-4 z-40 hidden rounded-full border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white backdrop-blur transition hover:bg-slate-800/80"
+    aria-label="显示音乐面板"
+  >
+    <i class="fa-solid fa-music mr-1"></i>
+    <span>音乐面板</span>
+  </button>
 
   {% set footer_text = request.state.footer_copyright_text | default("TuringTestGame", true) %}
   {% set footer_url = request.state.footer_copyright_url | default("https://github.com/xy3xy3/TuringTestGame", true) %}
@@ -179,14 +221,23 @@
       const tracks = {{ request.state.game_bgm_config | default({}, true) | tojson }};
       const initialStage = {{ bgm_stage | default("", true) | tojson }};
       const audioEl = document.getElementById("game-bgm-player");
+      const widgetEl = document.getElementById("bgm-widget");
       const toggleBtn = document.getElementById("bgm-toggle-btn");
+      const volumePanel = document.getElementById("bgm-volume-panel");
       const volumeRange = document.getElementById("bgm-volume-range");
       const volumeText = document.getElementById("bgm-volume-text");
-      if (!audioEl || !toggleBtn || !volumeRange || !volumeText) return;
+      const collapseBtn = document.getElementById("bgm-collapse-btn");
+      const hideBtn = document.getElementById("bgm-hide-btn");
+      const showBtn = document.getElementById("bgm-show-btn");
+      const dragHandle = document.getElementById("bgm-drag-handle");
+      if (!audioEl || !widgetEl || !toggleBtn || !volumePanel || !volumeRange || !volumeText || !collapseBtn || !hideBtn || !showBtn || !dragHandle) return;
 
       const iconEl = toggleBtn.querySelector("i");
       const textEl = toggleBtn.querySelector("span");
+      const collapseIconEl = collapseBtn.querySelector("i");
       let enabled = window.localStorage.getItem("ttg_bgm_enabled") !== "0";
+      let isCollapsed = window.localStorage.getItem("ttg_bgm_widget_collapsed") === "1";
+      let isHidden = window.localStorage.getItem("ttg_bgm_widget_hidden") === "1";
       // 将本地存储值统一归一化为 0~1，兼容历史百分比存储值。
       const normalizeVolume = (rawValue) => {
         const parsed = Number(rawValue);
@@ -202,6 +253,69 @@
       let volume = normalizeVolume(window.localStorage.getItem("ttg_bgm_volume"));
       let currentStage = "";
       let pendingUserGesture = false;
+      let isDragging = false;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+      const defaultPosition = { right: 16, top: 16 };
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      // 读取持久化坐标，异常值自动忽略，防止面板丢失到可视区域外。
+      const readStoredPosition = () => {
+        const raw = window.localStorage.getItem("ttg_bgm_widget_pos");
+        if (!raw) return null;
+        try {
+          const parsed = JSON.parse(raw);
+          const left = Number(parsed.left);
+          const top = Number(parsed.top);
+          if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+          return { left, top };
+        } catch {
+          return null;
+        }
+      };
+
+      // 将面板定位到指定坐标，且保证不超出屏幕边界。
+      const applyWidgetPosition = (left, top, persist = false) => {
+        const rect = widgetEl.getBoundingClientRect();
+        const maxLeft = Math.max(0, window.innerWidth - rect.width);
+        const maxTop = Math.max(0, window.innerHeight - rect.height);
+        const nextLeft = clamp(Math.round(left), 0, maxLeft);
+        const nextTop = clamp(Math.round(top), 0, maxTop);
+        widgetEl.style.left = `${nextLeft}px`;
+        widgetEl.style.top = `${nextTop}px`;
+        widgetEl.style.right = "auto";
+        if (persist) {
+          window.localStorage.setItem("ttg_bgm_widget_pos", JSON.stringify({ left: nextLeft, top: nextTop }));
+        }
+      };
+
+      // 首次加载时恢复拖拽坐标，若无记录则使用右上角默认位置。
+      const restoreWidgetPosition = () => {
+        const stored = readStoredPosition();
+        if (stored) {
+          applyWidgetPosition(stored.left, stored.top);
+          return;
+        }
+        widgetEl.style.left = "auto";
+        widgetEl.style.right = `${defaultPosition.right}px`;
+        widgetEl.style.top = `${defaultPosition.top}px`;
+      };
+
+      // 根据隐藏状态刷新显示，隐藏后保留一个轻量按钮方便快速恢复。
+      const applyHiddenState = () => {
+        widgetEl.classList.toggle("hidden", isHidden);
+        showBtn.classList.toggle("hidden", !isHidden);
+        window.localStorage.setItem("ttg_bgm_widget_hidden", isHidden ? "1" : "0");
+      };
+
+      // 根据收起状态刷新音量区域，避免遮挡回合信息。
+      const applyCollapsedState = () => {
+        volumePanel.classList.toggle("hidden", isCollapsed);
+        if (collapseIconEl) {
+          collapseIconEl.className = isCollapsed ? "fa-solid fa-chevron-down" : "fa-solid fa-chevron-up";
+        }
+        window.localStorage.setItem("ttg_bgm_widget_collapsed", isCollapsed ? "1" : "0");
+      };
 
       // 同步播放器实际音量，确保切歌后也沿用当前设置。
       const applyVolume = () => {
@@ -295,9 +409,73 @@
         pendingUserGesture = false;
         tryPlayCurrent();
       };
+
+      // 拖拽开始：记录鼠标与面板左上角偏移，后续移动即可平滑跟手。
+      const startDrag = (clientX, clientY) => {
+        if (isHidden) return;
+        const rect = widgetEl.getBoundingClientRect();
+        dragOffsetX = clientX - rect.left;
+        dragOffsetY = clientY - rect.top;
+        isDragging = true;
+      };
+
+      // 拖拽进行中：持续更新面板坐标并实时裁剪到可视区域。
+      const moveDrag = (clientX, clientY) => {
+        if (!isDragging) return;
+        applyWidgetPosition(clientX - dragOffsetX, clientY - dragOffsetY);
+      };
+
+      // 拖拽结束：写入 localStorage，刷新后仍保留用户上次摆放位置。
+      const stopDrag = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        const rect = widgetEl.getBoundingClientRect();
+        applyWidgetPosition(rect.left, rect.top, true);
+      };
+
+      dragHandle.addEventListener("pointerdown", (event) => {
+        if (!(event instanceof PointerEvent)) return;
+        startDrag(event.clientX, event.clientY);
+        try {
+          dragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // 某些浏览器可能不支持指针捕获，这里忽略即可。
+        }
+        event.preventDefault();
+      });
+      dragHandle.addEventListener("pointermove", (event) => {
+        if (!(event instanceof PointerEvent)) return;
+        moveDrag(event.clientX, event.clientY);
+      });
+      dragHandle.addEventListener("pointerup", stopDrag);
+      dragHandle.addEventListener("pointercancel", stopDrag);
+
+      collapseBtn.addEventListener("click", () => {
+        isCollapsed = !isCollapsed;
+        applyCollapsedState();
+      });
+      hideBtn.addEventListener("click", () => {
+        isHidden = true;
+        applyHiddenState();
+      });
+      showBtn.addEventListener("click", () => {
+        isHidden = false;
+        applyHiddenState();
+      });
+      window.addEventListener("resize", () => {
+        const rect = widgetEl.getBoundingClientRect();
+        if (isHidden) return;
+        if (widgetEl.style.left) {
+          applyWidgetPosition(rect.left, rect.top, true);
+        }
+      });
+
       window.addEventListener("pointerdown", onUserGesture, { passive: true });
       window.addEventListener("keydown", onUserGesture, { passive: true });
 
+      restoreWidgetPosition();
+      applyHiddenState();
+      applyCollapsedState();
       applyVolume();
       updateVolumeUi();
       updateToggleUi();
