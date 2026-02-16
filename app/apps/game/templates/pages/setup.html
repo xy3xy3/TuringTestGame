@@ -14,6 +14,20 @@
       <div class="text-right">
         <div id="countdown" class="text-3xl font-bold text-white">{{ room.config.setup_duration }}</div>
         <p class="text-purple-200 text-sm">秒后开始</p>
+        <div class="mt-2 flex items-center justify-end gap-2 text-xs">
+          <span id="setup-connection-indicator" class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100">
+            <span id="setup-connection-dot" class="h-2 w-2 rounded-full bg-green-400"></span>
+            <span id="setup-connection-text">实时连接正常</span>
+          </span>
+          <button
+            id="setup-reconnect-btn"
+            type="button"
+            class="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100 transition hover:bg-white/20"
+            onclick="forceReconnectSetupSSE('manual')"
+          >
+            立即重连
+          </button>
+        </div>
       </div>
     </div>
 
@@ -105,9 +119,10 @@ let systemPrompt = '';
 let startedAt = null;
 let timerInterval = null;
 let hasNavigated = false;  // 防止重复跳转
-let eventSource = null;
+let setupSSEClient = null;
 let phasePollingTimer = null;
 let lastRemaining = setupTime;
+let roomStateRequestInFlight = null;
 
 function bindPromptTemplateSelector() {
   const selectEl = document.getElementById('prompt-template-select');
@@ -135,6 +150,27 @@ function bindPromptTemplateSelector() {
   });
 }
 
+// 更新 setup 页连接状态，告知玩家当前网络与实时链路状态。
+function setSetupConnectionStatus(status, customText = '') {
+  const dot = document.getElementById('setup-connection-dot');
+  const text = document.getElementById('setup-connection-text');
+  if (!dot || !text) return;
+
+  dot.classList.remove('bg-green-400', 'bg-yellow-400', 'bg-red-400');
+  if (status === 'connected') {
+    dot.classList.add('bg-green-400');
+    text.textContent = customText || '实时连接正常';
+    return;
+  }
+  if (status === 'offline') {
+    dot.classList.add('bg-red-400');
+    text.textContent = customText || '网络断开，等待恢复';
+    return;
+  }
+  dot.classList.add('bg-yellow-400');
+  text.textContent = customText || '连接波动，重连中...';
+}
+
 function navigateToPlay() {
   if (hasNavigated) return;
   hasNavigated = true;
@@ -146,31 +182,38 @@ function navigateToPlay() {
     clearInterval(timerInterval);
     timerInterval = null;
   }
-  if (eventSource) {
-    eventSource.close();
+  if (setupSSEClient) {
+    setupSSEClient.close();
+    setupSSEClient = null;
   }
   window.location.href = `/game/${roomId}/play`;
 }
 
-function checkRoomPhaseAndNavigate() {
-  if (hasNavigated) return;
-  fetch(`/game/api/${roomId}/state`)
-    .then(res => res.json())
-    .then(data => {
-      const phase = data?.room?.phase;
-      if (phase === 'playing') {
-        navigateToPlay();
-      }
-    })
-    .catch(() => {
-      // 网络抖动时静默重试，避免影响页面体验
-    });
+function redirectByRoomPhase(phase) {
+  const normalized = String(phase || '').trim().toLowerCase();
+  if (normalized === 'playing') {
+    navigateToPlay();
+    return true;
+  }
+  if (normalized === 'waiting') {
+    hasNavigated = true;
+    window.location.href = `/game/${roomId}`;
+    return true;
+  }
+  if (normalized === 'finished') {
+    hasNavigated = true;
+    window.location.href = `/game/${roomId}/result`;
+    return true;
+  }
+  return false;
 }
 
 function ensurePhasePolling() {
   if (hasNavigated || phasePollingTimer) return;
-  checkRoomPhaseAndNavigate();
-  phasePollingTimer = setInterval(checkRoomPhaseAndNavigate, 700);
+  syncRoomState({ silent: true });
+  phasePollingTimer = setInterval(() => {
+    syncRoomState({ silent: true });
+  }, 1000);
 }
 
 // 计算剩余时间（基于服务器 UTC 时间戳）
@@ -213,85 +256,107 @@ function updateCountdown() {
   applyCountdown(getRemainingTime());
 }
 
+async function syncRoomState(options = {}) {
+  if (hasNavigated) return;
+  const silent = Boolean(options.silent);
+  if (roomStateRequestInFlight) {
+    return roomStateRequestInFlight;
+  }
+
+  roomStateRequestInFlight = (async () => {
+    try {
+      const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
+      const response = await requestFn(`/game/api/${roomId}/state`, { cache: 'no-store' }, { timeoutMs: 5000, retries: 1 });
+      const data = await response.json();
+      if (!data.success || !data.room) {
+        return;
+      }
+
+      if (redirectByRoomPhase(data.room.phase)) return;
+
+      if (data.room.phase === 'setup' && data.room.started_at) {
+        startedAt = new Date(data.room.started_at).getTime();
+        updateCountdown();
+      }
+    } catch (error) {
+      if (!silent) {
+        console.error('Failed to fetch room state:', error);
+      }
+    } finally {
+      roomStateRequestInFlight = null;
+    }
+  })();
+
+  return roomStateRequestInFlight;
+}
+
 // 初始化倒计时显示
 updateCountdown();
 bindPromptTemplateSelector();
-
-// 页面加载时获取房间状态
-fetch(`/game/api/${roomId}/state`)
-  .then(res => res.json())
-  .then(data => {
-    if (data.success && data.room) {
-      const room = data.room;
-      // 如果游戏已经在 playing 阶段，直接跳转
-      if (room.phase === 'playing') {
-        navigateToPlay();
-        return;
-      }
-      // 如果已经在 setup 阶段且有开始时间，同步倒计时
-      if (room.phase === 'setup' && room.started_at) {
-        // 时间戳已带 Z 后缀，直接解析
-        startedAt = new Date(room.started_at).getTime();
-        updateCountdown();
-      }
-    }
-  })
-  .catch(e => console.error('Failed to fetch room state:', e));
+setSetupConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复');
+syncRoomState();
+ensurePhasePolling();
 
 // 启动定时器，每秒更新
 timerInterval = setInterval(updateCountdown, 1000);
 
-// SSE 监听
-eventSource = new EventSource(`/game/${roomId}/events`);
-
-// 监听游戏开始事件（获取服务器时间戳）
-eventSource.addEventListener('game_starting', (e) => {
-  const data = JSON.parse(e.data);
-  if (data.started_at) {
-    // 时间戳已带 Z 后缀，直接解析
-    startedAt = new Date(data.started_at).getTime();
-    updateCountdown();
-  }
-});
-
-// 监听后端倒计时事件（同步时间）
-eventSource.addEventListener('countdown', (e) => {
-  const data = JSON.parse(e.data);
-  const eventPhase = String(data.phase || '').trim().toLowerCase();
-
-  // setup 页面只处理 setup 阶段倒计时，避免后续阶段倒计时“回弹”到 30/60 秒。
-  // 一旦收到其它阶段倒计时，说明游戏已进入正式流程，直接跳转 play 页面。
-  if (eventPhase && eventPhase !== 'setup') {
-    navigateToPlay();
-    return;
-  }
-
-  // 优先使用服务器直接发送的剩余时间
-  if (data.remaining !== undefined) {
-    // 更新 startedAt 以便本地倒计时同步
-    if (data.started_at) {
-      // 时间戳已带 Z 后缀，直接解析
-      startedAt = new Date(data.started_at).getTime();
+// SSE 监听（含断线自动重连与在线状态回调）。
+setupSSEClient = window.createResilientSSE({
+  url: `/game/${roomId}/events`,
+  onStatusChange: (status) => {
+    if (status === 'connected') {
+      setSetupConnectionStatus('connected');
+      return;
     }
-    // 使用服务端剩余时间更新（同时做“单调不增”保护）
-    applyCountdown(data.remaining);
-  } else if (data.started_at) {
-    startedAt = new Date(data.started_at).getTime();
-    updateCountdown();
-  }
-});
+    if (status === 'offline') {
+      setSetupConnectionStatus('offline');
+      return;
+    }
+    setSetupConnectionStatus('reconnecting');
+  },
+  events: {
+    ping: () => {},
+    game_starting: (e) => {
+      const data = JSON.parse(e.data || '{}');
+      if (data.started_at) {
+        startedAt = new Date(data.started_at).getTime();
+        updateCountdown();
+      }
+    },
+    countdown: (e) => {
+      const data = JSON.parse(e.data || '{}');
+      const eventPhase = String(data.phase || '').trim().toLowerCase();
+      if (eventPhase && eventPhase !== 'setup') {
+        navigateToPlay();
+        return;
+      }
 
-// 监听游戏开始事件（后端统一控制跳转）
-eventSource.addEventListener('game_start', (e) => {
-  navigateToPlay();
+      if (data.remaining !== undefined) {
+        if (data.started_at) {
+          startedAt = new Date(data.started_at).getTime();
+        }
+        applyCountdown(data.remaining);
+      } else if (data.started_at) {
+        startedAt = new Date(data.started_at).getTime();
+        updateCountdown();
+      }
+    },
+    game_start: () => {
+      navigateToPlay();
+    },
+    game_error: (e) => {
+      const data = JSON.parse(e.data || '{}');
+      alert(data.error || '游戏状态异常');
+      window.location.href = `/game/${roomId}`;
+    },
+  },
 });
+setupSSEClient.connect('setup_initial');
 
-// 监听游戏错误事件
-eventSource.addEventListener('game_error', (e) => {
-  const data = JSON.parse(e.data);
-  alert(data.error);
-  window.location.href = `/game/${roomId}`;
-});
+window.forceReconnectSetupSSE = function(reason = 'manual') {
+  if (!setupSSEClient) return;
+  setupSSEClient.forceReconnect(reason);
+};
 
 // 测试消息发送
 async function sendTestMessage() {
@@ -330,24 +395,34 @@ async function sendTestMessage() {
     requestBody.model_id = aiModelId;
   }
 
-  const response = await fetch('/game/api/chat', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(requestBody)
-  });
+  try {
+    const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
+    const response = await requestFn(
+      '/game/api/chat',
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(requestBody),
+      },
+      {
+        timeoutMs: 7000,
+        retries: 2,
+      },
+    );
+    const result = await response.json();
 
-  const result = await response.json();
-
-  // 移除思考中提示
-  chatArea.querySelectorAll('.text-center.text-purple-300').forEach(el => el.remove());
-
-  if (result.success) {
-    chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-pink-500/30 rounded-lg px-3 py-2 text-white">${result.content}</div></div>`;
-  } else {
-    chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-red-500/30 rounded-lg px-3 py-2 text-red-300">${result.error}</div></div>`;
+    if (result.success) {
+      chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-pink-500/30 rounded-lg px-3 py-2 text-white">${result.content}</div></div>`;
+    } else {
+      chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-red-500/30 rounded-lg px-3 py-2 text-red-300">${result.error || '请求失败，请稍后重试'}</div></div>`;
+    }
+  } catch (_error) {
+    chatArea.innerHTML += `<div class="text-left"><div class="inline-block bg-red-500/30 rounded-lg px-3 py-2 text-red-300">网络异常，未能完成调试请求，请稍后重试。</div></div>`;
+  } finally {
+    // 移除思考中提示
+    chatArea.querySelectorAll('.text-center.text-purple-300').forEach((el) => el.remove());
+    chatArea.scrollTop = chatArea.scrollHeight;
   }
-
-  chatArea.scrollTop = chatArea.scrollHeight;
 }
 
 window.addEventListener('beforeunload', () => {
@@ -359,8 +434,9 @@ window.addEventListener('beforeunload', () => {
     clearInterval(timerInterval);
     timerInterval = null;
   }
-  if (eventSource) {
-    eventSource.close();
+  if (setupSSEClient) {
+    setupSSEClient.close();
+    setupSSEClient = null;
   }
 });
 </script>

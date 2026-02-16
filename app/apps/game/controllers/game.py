@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -23,6 +24,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/game")
+SSE_HEARTBEAT_INTERVAL_SECONDS = 12
 
 
 def _to_utc_iso(value: datetime | None) -> str | None:
@@ -612,9 +614,22 @@ async def sse_events(request: Request, room_id: str):
 
     async def event_generator():
         queue = sse_manager.subscribe(room_id)
+        # 首包下发 retry 指令，统一浏览器内置重连间隔基线。
+        yield "retry: 2000\n\n"
         try:
             while True:
-                message = await queue.get()
+                # 客户端断开时及时退出，避免后台协程泄漏。
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=SSE_HEARTBEAT_INTERVAL_SECONDS)
+                except asyncio.TimeoutError:
+                    # 空闲心跳：防止代理按空闲连接回收 SSE。
+                    ping_payload = json.dumps({"ts": _to_utc_iso(datetime.now(timezone.utc))})
+                    yield f"event: ping\ndata: {ping_payload}\n\n"
+                    continue
+
                 # message 是 JSON 字符串，格式：{"event": "player_ready_changed", "data": {...}}
                 # 解析为标准 SSE 格式
                 parsed = json.loads(message)
@@ -626,8 +641,15 @@ async def sse_events(request: Request, room_id: str):
         finally:
             sse_manager.unsubscribe(room_id, queue)
 
-    import asyncio
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/api/chat")

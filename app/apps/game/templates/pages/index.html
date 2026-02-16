@@ -16,6 +16,22 @@
       <p class="text-purple-200">你是人还是 AI？一起来挑战吧！</p>
     </div>
 
+    <div id="resume-game-card" class="mb-6 hidden rounded-2xl border border-green-300/20 bg-green-500/10 p-4 backdrop-blur-md">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-green-200">检测到你有未结束的对局</p>
+          <p id="resume-game-detail" class="mt-1 text-xs text-green-100/90">可继续返回上一局。</p>
+        </div>
+        <button
+          id="resume-game-btn"
+          type="button"
+          class="btn-primary whitespace-nowrap px-4 py-2 text-sm"
+        >
+          继续上局
+        </button>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- 创建房间 -->
       <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
@@ -176,5 +192,34 @@
 
   // 页面加载时处理邀请链接
   handleInviteLink();
+
+  // 检测是否存在可恢复的对局，给出“继续上局”入口但不强制跳转。
+  async function initResumeGameCard() {
+    const cardEl = document.getElementById('resume-game-card');
+    const detailEl = document.getElementById('resume-game-detail');
+    const btnEl = document.getElementById('resume-game-btn');
+    if (!cardEl || !btnEl || !detailEl) return;
+
+    try {
+      const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
+      const response = await requestFn(
+        '/game/reconnect',
+        { method: 'POST' },
+        { timeoutMs: 4500, retries: 1 },
+      );
+      const data = await response.json();
+      if (!data.success || !data.redirect) return;
+
+      detailEl.textContent = `房间号：${data.room_code || '-'} · 当前阶段：${data.phase || 'unknown'}`;
+      btnEl.addEventListener('click', () => {
+        window.location.href = data.redirect;
+      });
+      cardEl.classList.remove('hidden');
+    } catch (_error) {
+      // 静默失败：不影响首页创建/加入主流程。
+    }
+  }
+
+  initResumeGameCard();
 </script>
 {% endblock %}

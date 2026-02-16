@@ -22,14 +22,20 @@ from app.services import ai_chat_service, config_service, game_room_service
 class SSEManager:
     """SSE 事件管理器。"""
 
-    def __init__(self):
+    def __init__(self, queue_maxsize: int = 200):
+        """初始化 SSE 连接管理器。
+
+        Args:
+            queue_maxsize: 单连接事件队列上限，防止慢连接导致内存堆积。
+        """
         self._connections: dict[str, set[asyncio.Queue]] = {}
+        self._queue_maxsize = max(1, int(queue_maxsize))
 
     def subscribe(self, room_id: str) -> asyncio.Queue:
         """订阅房间事件。"""
         if room_id not in self._connections:
             self._connections[room_id] = set()
-        queue = asyncio.Queue()
+        queue: asyncio.Queue[str] = asyncio.Queue(maxsize=self._queue_maxsize)
         self._connections[room_id].add(queue)
         return queue
 
@@ -37,14 +43,33 @@ class SSEManager:
         """取消订阅。"""
         if room_id in self._connections:
             self._connections[room_id].discard(queue)
+            # 房间无活跃连接后及时清理，避免长期保留空 key。
+            if not self._connections[room_id]:
+                self._connections.pop(room_id, None)
 
     async def publish(self, room_id: str, event: str, data: dict[str, Any]):
         """发布事件到房间。"""
         if room_id not in self._connections:
             return
         message = json.dumps({"event": event, "data": data})
-        for queue in self._connections[room_id]:
-            await queue.put(message)
+        stale_queues: list[asyncio.Queue] = []
+        for queue in list(self._connections.get(room_id, set())):
+            # 非阻塞写入：队列满时丢弃最旧事件，优先保留最新状态。
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # 理论上已提前丢弃旧事件；若仍写入失败，视为异常慢连接并跳过。
+                continue
+            except RuntimeError:
+                stale_queues.append(queue)
+
+        for queue in stale_queues:
+            self.unsubscribe(room_id, queue)
 
     def get_connection_count(self, room_id: str) -> int:
         """获取房间连接数。"""

@@ -15,6 +15,20 @@
         <div class="text-right">
           <p class="text-purple-200">状态：<span id="room-phase" class="text-white">{{ room.phase }}</span></p>
           <p class="text-purple-200">回合：<span id="room-current-round">{{ room.current_round }}</span>/<span id="room-total-rounds">{{ room.total_rounds }}</span></p>
+          <div class="mt-2 flex items-center justify-end gap-2 text-xs">
+            <span id="room-connection-indicator" class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100">
+              <span id="room-connection-dot" class="h-2 w-2 rounded-full bg-green-400"></span>
+              <span id="room-connection-text">实时连接正常</span>
+            </span>
+            <button
+              id="room-reconnect-btn"
+              type="button"
+              class="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100 transition hover:bg-white/20"
+              onclick="forceReconnectRoomSSE('manual')"
+            >
+              立即重连
+            </button>
+          </div>
         </div>
       </div>
 
@@ -178,7 +192,9 @@ function showCopyToast(message) {
 // 等待 HTMX 加载完成
 document.addEventListener('DOMContentLoaded', () => {
   const roomId = '{{ room.id }}';
-  console.log('Room ID:', roomId);
+  let roomSSEClient = null;
+  let roomPollingTimer = null;
+  let roomStateFetchPromise = null;
 
   // 获取当前玩家 ID（从 Cookie 中读取）
   function getCurrentPlayerId() {
@@ -192,8 +208,63 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
+  // 更新大厅连接状态徽标，统一提示在线/重连/离线状态。
+  function setRoomConnectionStatus(status, customText = '') {
+    const dot = document.getElementById('room-connection-dot');
+    const text = document.getElementById('room-connection-text');
+    if (!dot || !text) return;
+
+    dot.classList.remove('bg-green-400', 'bg-yellow-400', 'bg-red-400');
+    if (status === 'connected') {
+      dot.classList.add('bg-green-400');
+      text.textContent = customText || '实时连接正常';
+      return;
+    }
+    if (status === 'offline') {
+      dot.classList.add('bg-red-400');
+      text.textContent = customText || '网络断开，等待恢复';
+      return;
+    }
+    dot.classList.add('bg-yellow-400');
+    text.textContent = customText || '连接波动，重连中...';
+  }
+
+  // 房间阶段变化时按后端权威状态跳转，避免停留在错误页面。
+  function redirectByRoomPhase(phase) {
+    const normalized = String(phase || '').trim().toLowerCase();
+    if (normalized === 'setup') {
+      window.location.href = `/game/${roomId}/setup`;
+      return true;
+    }
+    if (normalized === 'playing') {
+      window.location.href = `/game/${roomId}/play`;
+      return true;
+    }
+    if (normalized === 'finished') {
+      window.location.href = `/game/${roomId}/result`;
+      return true;
+    }
+    return false;
+  }
+
+  // 断线期间启用轮询兜底，避免 SSE 暂时不可用时列表和阶段卡住。
+  function startRoomFallbackPolling() {
+    if (roomPollingTimer) return;
+    roomPollingTimer = setInterval(() => {
+      window.updateReadyButtonState({ silent: true });
+      refreshPlayerList({ silent: true });
+    }, 2000);
+  }
+
+  function stopRoomFallbackPolling() {
+    if (!roomPollingTimer) return;
+    clearInterval(roomPollingTimer);
+    roomPollingTimer = null;
+  }
+
   // 更新准备按钮状态和开始按钮可用性
-  window.updateReadyButtonState = function() {
+  window.updateReadyButtonState = async function(options = {}) {
+    const silent = Boolean(options.silent);
     const readyBtn = document.getElementById('ready-btn');
     const startBtn = document.getElementById('start-btn');
     const playerCountEl = document.getElementById('player-count');
@@ -206,147 +277,171 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentPlayerId = getCurrentPlayerId();
 
     if (!currentPlayerId && !playerCountEl && !phaseEl && !currentRoundEl && !totalRoundEl) return;
+    if (roomStateFetchPromise) {
+      return roomStateFetchPromise;
+    }
 
-    // 通过 fetch 获取房间状态
-    fetch(`/game/api/${roomId}/state`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.players) {
-          if (phaseEl && data.room?.phase) {
-            phaseEl.textContent = String(data.room.phase);
-          }
-          if (currentRoundEl && data.room?.current_round !== undefined) {
-            currentRoundEl.textContent = String(data.room.current_round);
-          }
-          if (totalRoundEl) {
-            const totalRounds = data.room?.total_rounds ?? data.room?.config?.rounds_per_game;
-            if (totalRounds !== undefined) {
-              totalRoundEl.textContent = String(totalRounds);
-            }
-          }
-          const bonusScoringEnabled = Boolean(data.room?.config?.bonus_scoring_enabled);
-          if (bonusStatusEl) {
-            bonusStatusEl.textContent = bonusScoringEnabled ? '已开启' : '未开启';
-            bonusStatusEl.classList.toggle('bg-green-500/20', bonusScoringEnabled);
-            bonusStatusEl.classList.toggle('text-green-300', bonusScoringEnabled);
-            bonusStatusEl.classList.toggle('bg-slate-500/20', !bonusScoringEnabled);
-            bonusStatusEl.classList.toggle('text-slate-300', !bonusScoringEnabled);
-          }
-          if (bonusDescEl) {
-            bonusDescEl.textContent = bonusScoringEnabled
-              ? '已开启：提问者/被测者满足条件可获得额外加分'
-              : '未开启：仅按投票结果计分';
-          }
-          if (bonusToggleEl) {
-            bonusToggleEl.checked = bonusScoringEnabled;
-          }
+    roomStateFetchPromise = (async () => {
+      try {
+        const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
+        const response = await requestFn(`/game/api/${roomId}/state`, { cache: 'no-store' }, { timeoutMs: 5000, retries: 1 });
+        const data = await response.json();
+        if (!data.success || !data.players) {
+          return;
+        }
 
-          // 同步顶部玩家数量展示，避免仅刷新卡片时顶部人数不更新。
-          if (playerCountEl) {
-            playerCountEl.textContent = String(data.players.length);
-          }
+        if (redirectByRoomPhase(data.room?.phase)) {
+          return;
+        }
 
-          // 注意：API 返回的 id 是字符串，Cookie 中的 player_id 也是字符串
-          const currentPlayer = data.players.find(p => p.id === currentPlayerId);
-          if (currentPlayer && readyBtn) {
-            const isReady = currentPlayer.is_ready;
-            // 更新按钮文字和点击值
-            readyBtn.textContent = isReady ? '取消准备' : '准备';
-            readyBtn.setAttribute('hx-vals', `{"is_ready": "${!isReady}"}`);
-          }
-
-          // 检查是否所有玩家都已准备（房主功能）
-          if (startBtn) {
-            const allReady = data.players.every(p => p.is_ready);
-            const playerCount = data.players.length;
-            const minPlayers = data.room?.config?.min_players || 2;
-
-            if (allReady && playerCount >= minPlayers) {
-              startBtn.disabled = false;
-              startBtn.textContent = '开始游戏';
-              startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-            } else {
-              startBtn.disabled = true;
-              if (playerCount < minPlayers) {
-                startBtn.textContent = `需要至少 ${minPlayers} 名玩家`;
-              } else {
-                startBtn.textContent = '等待所有玩家准备';
-              }
-              startBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            }
+        if (phaseEl && data.room?.phase) {
+          phaseEl.textContent = String(data.room.phase);
+        }
+        if (currentRoundEl && data.room?.current_round !== undefined) {
+          currentRoundEl.textContent = String(data.room.current_round);
+        }
+        if (totalRoundEl) {
+          const totalRounds = data.room?.total_rounds ?? data.room?.config?.rounds_per_game;
+          if (totalRounds !== undefined) {
+            totalRoundEl.textContent = String(totalRounds);
           }
         }
-      })
-      .catch(e => console.error('Failed to fetch room state:', e));
+        const bonusScoringEnabled = Boolean(data.room?.config?.bonus_scoring_enabled);
+        if (bonusStatusEl) {
+          bonusStatusEl.textContent = bonusScoringEnabled ? '已开启' : '未开启';
+          bonusStatusEl.classList.toggle('bg-green-500/20', bonusScoringEnabled);
+          bonusStatusEl.classList.toggle('text-green-300', bonusScoringEnabled);
+          bonusStatusEl.classList.toggle('bg-slate-500/20', !bonusScoringEnabled);
+          bonusStatusEl.classList.toggle('text-slate-300', !bonusScoringEnabled);
+        }
+        if (bonusDescEl) {
+          bonusDescEl.textContent = bonusScoringEnabled
+            ? '已开启：提问者/被测者满足条件可获得额外加分'
+            : '未开启：仅按投票结果计分';
+        }
+        if (bonusToggleEl) {
+          bonusToggleEl.checked = bonusScoringEnabled;
+        }
+
+        // 同步顶部玩家数量展示，避免仅刷新卡片时顶部人数不更新。
+        if (playerCountEl) {
+          playerCountEl.textContent = String(data.players.length);
+        }
+
+        // 注意：API 返回的 id 是字符串，Cookie 中的 player_id 也是字符串。
+        const currentPlayer = data.players.find((player) => player.id === currentPlayerId);
+        if (currentPlayer && readyBtn) {
+          const isReady = currentPlayer.is_ready;
+          readyBtn.textContent = isReady ? '取消准备' : '准备';
+          readyBtn.setAttribute('hx-vals', `{"is_ready": "${!isReady}"}`);
+        }
+
+        // 检查是否所有玩家都已准备（房主功能）。
+        if (startBtn) {
+          const allReady = data.players.every((player) => player.is_ready);
+          const playerCount = data.players.length;
+          const minPlayers = data.room?.config?.min_players || 2;
+
+          if (allReady && playerCount >= minPlayers) {
+            startBtn.disabled = false;
+            startBtn.textContent = '开始游戏';
+            startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          } else {
+            startBtn.disabled = true;
+            if (playerCount < minPlayers) {
+              startBtn.textContent = `需要至少 ${minPlayers} 名玩家`;
+            } else {
+              startBtn.textContent = '等待所有玩家准备';
+            }
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+          }
+        }
+      } catch (error) {
+        if (!silent) {
+          console.error('Failed to fetch room state:', error);
+        }
+      } finally {
+        roomStateFetchPromise = null;
+      }
+    })();
+
+    return roomStateFetchPromise;
   };
 
-  function refreshPlayerList() {
-    htmx.ajax('GET', `/game/${roomId}/players`, {target: '#player-list', swap: 'outerHTML'});
+  function refreshPlayerList(options = {}) {
+    const silent = Boolean(options.silent);
+    try {
+      htmx.ajax('GET', `/game/${roomId}/players`, { target: '#player-list', swap: 'outerHTML' });
+    } catch (error) {
+      if (!silent) {
+        console.error('Failed to refresh room players:', error);
+      }
+    }
   }
 
-  // SSE 连接
-  const eventSource = new EventSource(`/game/${roomId}/events`);
-
-  eventSource.addEventListener('open', () => {
-    console.log('SSE connection opened');
-  });
-
-  eventSource.addEventListener('player_joined', (e) => {
-    console.log('SSE event: player_joined', e.data);
-    refreshPlayerList();
-    // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
-    window.updateReadyButtonState();
-  });
-
-  eventSource.addEventListener('player_left', (e) => {
-    console.log('SSE event: player_left', e.data);
-    refreshPlayerList();
-    // 更新开始按钮状态（玩家数量变化可能影响开始按钮）
-    window.updateReadyButtonState();
-  });
-
-  eventSource.addEventListener('player_ready_changed', (e) => {
-    console.log('SSE event: player_ready_changed', e.data);
-    refreshPlayerList();
-    // 更新准备按钮状态
-    window.updateReadyButtonState();
-  });
-
-  eventSource.addEventListener('player_kicked', (e) => {
-    console.log('SSE event: player_kicked', e.data);
-    const data = JSON.parse(e.data || '{}');
-    const currentPlayerId = getCurrentPlayerId();
-    if (data.player_id && data.player_id === currentPlayerId) {
-      window.location.href = '/game';
+  function handleRoomSSEStatus(status) {
+    if (status === 'connected') {
+      stopRoomFallbackPolling();
+      setRoomConnectionStatus('connected');
+      window.updateReadyButtonState({ silent: true });
       return;
     }
-    refreshPlayerList();
-    window.updateReadyButtonState();
+    startRoomFallbackPolling();
+    if (status === 'offline') {
+      setRoomConnectionStatus('offline');
+      return;
+    }
+    setRoomConnectionStatus('reconnecting');
+  }
+
+  roomSSEClient = window.createResilientSSE({
+    url: `/game/${roomId}/events`,
+    onStatusChange: handleRoomSSEStatus,
+    events: {
+      ping: () => {},
+      player_joined: () => {
+        refreshPlayerList();
+        window.updateReadyButtonState({ silent: true });
+      },
+      player_left: () => {
+        refreshPlayerList();
+        window.updateReadyButtonState({ silent: true });
+      },
+      player_ready_changed: () => {
+        refreshPlayerList();
+        window.updateReadyButtonState({ silent: true });
+      },
+      player_kicked: (e) => {
+        const data = JSON.parse(e.data || '{}');
+        const currentPlayerId = getCurrentPlayerId();
+        if (data.player_id && data.player_id === currentPlayerId) {
+          window.location.href = '/game';
+          return;
+        }
+        refreshPlayerList();
+        window.updateReadyButtonState({ silent: true });
+      },
+      bonus_scoring_updated: () => {
+        window.updateReadyButtonState({ silent: true });
+      },
+      game_starting: () => {
+        window.location.href = `/game/${roomId}/setup`;
+      },
+    },
   });
 
-  eventSource.addEventListener('bonus_scoring_updated', (e) => {
-    console.log('SSE event: bonus_scoring_updated', e.data);
-    window.updateReadyButtonState();
-  });
+  roomSSEClient.connect('room_initial');
 
-  eventSource.addEventListener('game_starting', (e) => {
-    console.log('SSE event: game_starting', e.data);
-    window.location.href = `/game/${roomId}/setup`;
-  });
-
-  eventSource.onerror = (e) => {
-    console.log('SSE connection error', e);
+  window.forceReconnectRoomSSE = function(reason = 'manual') {
+    if (!roomSSEClient) return;
+    roomSSEClient.forceReconnect(reason);
   };
-
-  window.addEventListener('beforeunload', () => {
-    eventSource.close();
-  });
 
   document.body.addEventListener('htmx:afterRequest', (evt) => {
     const path = evt.detail?.pathInfo?.requestPath || '';
     if (path.includes(`/game/${roomId}/kick/`)) {
       refreshPlayerList();
-      window.updateReadyButtonState();
+      window.updateReadyButtonState({ silent: true });
       return;
     }
     if (
@@ -356,11 +451,21 @@ document.addEventListener('DOMContentLoaded', () => {
     ) {
       return;
     }
-    window.updateReadyButtonState();
+    window.updateReadyButtonState({ silent: true });
+  });
+
+  window.addEventListener('beforeunload', () => {
+    stopRoomFallbackPolling();
+    if (roomSSEClient) {
+      roomSSEClient.close();
+      roomSSEClient = null;
+    }
   });
 
   // 初始化
-  window.updateReadyButtonState();
+  setRoomConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复');
+  window.updateReadyButtonState({ silent: true });
+  refreshPlayerList({ silent: true });
 });
 </script>
 {% endblock %}
