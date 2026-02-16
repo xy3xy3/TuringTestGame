@@ -274,6 +274,107 @@
       let suppressShowClickOnce = false;
       const defaultPosition = { right: 16, top: 16 };
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const BGM_PROGRESS_STORAGE_KEY = "ttg_bgm_progress_state_v1";
+      const BGM_PROGRESS_MAX_AGE_MS = 30 * 60 * 1000;
+      const BGM_PROGRESS_SAVE_INTERVAL_MS = 1500;
+
+      // 统一把相对路径/绝对路径转成可比较的完整 URL，避免同曲目误判成“不同来源”。
+      const normalizeTrackUrl = (rawUrl) => {
+        const value = String(rawUrl || "").trim();
+        if (!value) return "";
+        try {
+          return new URL(value, window.location.origin).href;
+        } catch {
+          return value;
+        }
+      };
+
+      // 仅在当前标签页内存储播放进度，避免多标签页互相覆盖。
+      const getBgmProgressStorage = () => {
+        try {
+          return window.sessionStorage;
+        } catch {
+          return null;
+        }
+      };
+
+      // 读取最近一次背景音乐播放快照。
+      const readBgmProgressSnapshot = () => {
+        const storage = getBgmProgressStorage();
+        if (!storage) return null;
+        const raw = storage.getItem(BGM_PROGRESS_STORAGE_KEY);
+        if (!raw) return null;
+        try {
+          const parsed = JSON.parse(raw);
+          const src = normalizeTrackUrl(parsed.src);
+          const time = Number(parsed.time);
+          const ts = Number(parsed.ts);
+          if (!src || !Number.isFinite(time) || time < 0 || !Number.isFinite(ts) || ts <= 0) {
+            return null;
+          }
+          return {
+            src,
+            time,
+            ts,
+            wasPlaying: Boolean(parsed.wasPlaying),
+          };
+        } catch {
+          return null;
+        }
+      };
+
+      // 记录当前曲目播放进度，供跨页面切换时续播。
+      const saveBgmProgressSnapshot = () => {
+        const storage = getBgmProgressStorage();
+        if (!storage) return;
+        const src = normalizeTrackUrl(audioEl.getAttribute("src") || audioEl.currentSrc);
+        if (!src) return;
+        const currentTime = Number(audioEl.currentTime);
+        if (!Number.isFinite(currentTime) || currentTime < 0) return;
+        const snapshot = {
+          src,
+          time: currentTime,
+          ts: Date.now(),
+          wasPlaying: !audioEl.paused && !audioEl.ended,
+        };
+        storage.setItem(BGM_PROGRESS_STORAGE_KEY, JSON.stringify(snapshot));
+      };
+
+      // 命中同一曲目时计算恢复时间；若切页期间本来在播放，则按真实流逝时间补偿进度。
+      const resolveResumeTimeForTrack = (normalizedSrc) => {
+        if (!normalizedSrc) return null;
+        const snapshot = readBgmProgressSnapshot();
+        if (!snapshot || snapshot.src !== normalizedSrc) return null;
+        const ageMs = Date.now() - snapshot.ts;
+        if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > BGM_PROGRESS_MAX_AGE_MS) return null;
+        let nextTime = snapshot.time;
+        if (snapshot.wasPlaying) {
+          nextTime += ageMs / 1000;
+        }
+        return nextTime >= 0 ? nextTime : null;
+      };
+
+      // 在音频元数据可用后设置 currentTime，确保恢复进度在各浏览器都稳定生效。
+      const seekBgmTime = (targetTime) => {
+        if (!Number.isFinite(targetTime) || targetTime < 0) return;
+        const applySeek = () => {
+          let nextTime = targetTime;
+          const duration = Number(audioEl.duration);
+          if (Number.isFinite(duration) && duration > 0) {
+            nextTime %= duration;
+          }
+          try {
+            audioEl.currentTime = Math.max(0, nextTime);
+          } catch {
+            // 某些浏览器在音频尚未就绪时会抛错，忽略即可。
+          }
+        };
+        if (audioEl.readyState >= 1) {
+          applySeek();
+          return;
+        }
+        audioEl.addEventListener("loadedmetadata", applySeek, { once: true });
+      };
 
       // 读取持久化坐标，异常值自动忽略，防止面板丢失到可视区域外。
       const readStoredPosition = () => {
@@ -380,26 +481,39 @@
         }
       };
 
-      const applyStage = (stage) => {
+      const applyStage = (stage, options = {}) => {
         const nextStage = String(stage || "").trim();
         const nextSrc = nextStage ? String(tracks[nextStage] || "").trim() : "";
+        const normalizedNextSrc = normalizeTrackUrl(nextSrc);
+        const forceRestart = Boolean(options.forceRestart);
         currentStage = nextStage;
         if (!nextSrc) {
+          saveBgmProgressSnapshot();
           audioEl.pause();
           audioEl.removeAttribute("src");
           audioEl.load();
           return;
         }
-        if (audioEl.getAttribute("src") !== nextSrc) {
+        const currentSrc = normalizeTrackUrl(audioEl.getAttribute("src") || audioEl.currentSrc);
+        if (currentSrc !== normalizedNextSrc) {
+          saveBgmProgressSnapshot();
           audioEl.setAttribute("src", nextSrc);
           audioEl.load();
+          if (!forceRestart) {
+            const resumeTime = resolveResumeTimeForTrack(normalizedNextSrc);
+            if (resumeTime !== null) {
+              seekBgmTime(resumeTime);
+            }
+          }
+        } else if (forceRestart) {
+          seekBgmTime(0);
         }
         applyVolume();
         tryPlayCurrent();
       };
 
-      window.setGameBgmStage = (stage) => {
-        applyStage(stage);
+      window.setGameBgmStage = (stage, options) => {
+        applyStage(stage, options || {});
       };
 
       toggleBtn.addEventListener("click", () => {
@@ -539,6 +653,16 @@
 
       window.addEventListener("pointerdown", onUserGesture, { passive: true });
       window.addEventListener("keydown", onUserGesture, { passive: true });
+      window.addEventListener("beforeunload", saveBgmProgressSnapshot);
+      window.addEventListener("pagehide", saveBgmProgressSnapshot);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          saveBgmProgressSnapshot();
+        }
+      });
+      audioEl.addEventListener("pause", saveBgmProgressSnapshot);
+      audioEl.addEventListener("ended", saveBgmProgressSnapshot);
+      window.setInterval(saveBgmProgressSnapshot, BGM_PROGRESS_SAVE_INTERVAL_MS);
 
       restoreWidgetPosition();
       applyHiddenState();
@@ -557,7 +681,7 @@
       while (queued.length) {
         const item = queued.shift();
         if (item && item.stage !== undefined) {
-          applyStage(item.stage);
+          applyStage(item.stage, item.options || {});
         }
       }
     })();
