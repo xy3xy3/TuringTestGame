@@ -15,6 +15,20 @@
         <div class="text-right">
           <div id="phase-display" class="text-lg font-semibold text-white">等待中...</div>
           <div id="countdown" class="text-3xl font-bold text-purple-400">--</div>
+          <div class="mt-2 flex items-center justify-end gap-2 text-xs">
+            <span id="connection-indicator" class="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100">
+              <span id="connection-dot" class="h-2 w-2 rounded-full bg-green-400"></span>
+              <span id="connection-text">实时连接正常</span>
+            </span>
+            <button
+              id="reconnect-btn"
+              type="button"
+              class="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-purple-100 transition hover:bg-white/20"
+              onclick="forceReconnectSSE('manual')"
+            >
+              立即重连
+            </button>
+          </div>
         </div>
       </div>
       
@@ -240,6 +254,11 @@ let lastAnswerDraft = '';
 
 // SSE 连接
 let eventSource = null;
+let hasSSEConnected = false;
+let sseReconnectTimer = null;
+let sseReconnectAttempts = 0;
+let stateSyncTimer = null;
+let isSyncingGameState = false;
 
 function mapPhaseToBgmStage(phase) {
   const phaseKey = String(phase || '').trim().toLowerCase();
@@ -391,72 +410,150 @@ function scheduleAnswerDraftSync() {
   }, 250);
 }
 
-function connectSSE() {
-  eventSource = new EventSource(`/game/${roomId}/events`);
+function setConnectionStatus(status, customText = '') {
+  const dot = document.getElementById('connection-dot');
+  const text = document.getElementById('connection-text');
+  if (!dot || !text) return;
+
+  dot.classList.remove('bg-green-400', 'bg-yellow-400', 'bg-red-400');
+  if (status === 'connected') {
+    dot.classList.add('bg-green-400');
+    text.textContent = customText || '实时连接正常';
+    return;
+  }
+  if (status === 'offline') {
+    dot.classList.add('bg-red-400');
+    text.textContent = customText || '网络断开，等待恢复';
+    return;
+  }
+  dot.classList.add('bg-yellow-400');
+  text.textContent = customText || '连接波动，重连中...';
+}
+
+function stopStateSyncPolling() {
+  if (!stateSyncTimer) return;
+  clearInterval(stateSyncTimer);
+  stateSyncTimer = null;
+}
+
+function startStateSyncPolling() {
+  if (stateSyncTimer) return;
+  // SSE 断线期间使用短轮询兜底，避免错过关键回合事件导致界面卡死。
+  stateSyncTimer = setInterval(() => {
+    initGameState({ silent: true, reason: 'fallback_poll' });
+  }, 1500);
+}
+
+function clearSSEReconnectTimer() {
+  if (!sseReconnectTimer) return;
+  clearTimeout(sseReconnectTimer);
+  sseReconnectTimer = null;
+}
+
+function scheduleSSEReconnect(reason) {
+  if (sseReconnectTimer) return;
+  if (!navigator.onLine) {
+    setConnectionStatus('offline');
+    return;
+  }
+  const delay = Math.min(8000, 1000 * (2 ** Math.min(sseReconnectAttempts, 3)));
+  sseReconnectTimer = setTimeout(() => {
+    sseReconnectTimer = null;
+    sseReconnectAttempts += 1;
+    connectSSE(reason || 'scheduled');
+  }, delay);
+}
+
+function markSSEUnhealthy(reason) {
+  if (!navigator.onLine) {
+    setConnectionStatus('offline');
+  } else {
+    setConnectionStatus('reconnecting');
+  }
+  startStateSyncPolling();
+  scheduleSSEReconnect(reason);
+}
+
+function updateRoundRoleFlags(roundData) {
+  const interrogatorId = String(roundData?.interrogator_id || '');
+  const subjectId = String(roundData?.subject_id || '');
+  isCurrentInterrogator = interrogatorId === playerId || (myNickname && roundData?.interrogator_nickname === myNickname);
+  isCurrentSubject = subjectId === playerId || (myNickname && roundData?.subject_nickname === myNickname);
+}
+
+function applyRoundIdentity(roundData) {
+  setRoundDisplay(roundData.round_number, roundData.total_rounds);
+  currentRoundId = String(roundData.round_id || roundData.id || '');
+  const interrogatorName = String(roundData.interrogator_nickname || '未知');
+  const subjectName = String(roundData.subject_nickname || '未知');
+  document.getElementById('interrogator-name').textContent = interrogatorName;
+  document.getElementById('interrogator-avatar').textContent = interrogatorName[0] || '?';
+  document.getElementById('subject-name').textContent = subjectName;
+  document.getElementById('subject-avatar').textContent = subjectName[0] || '?';
+  updateRoundRoleFlags(roundData);
+}
+
+function resetRoundViewForQuestioning() {
+  document.getElementById('question-text').textContent = '等待提问...';
+  document.getElementById('answer-text').textContent = '等待回答...';
+  document.getElementById('question-input').value = '';
+  document.getElementById('answer-input').value = '';
+  document.getElementById('answer-content').classList.add('hidden');
+  document.getElementById('loading-area').classList.add('hidden');
+  myLastVote = '';
+  resetRoundFeedback();
+  resetDraftSyncState();
+}
+
+function connectSSE(reason = 'init') {
+  if (eventSource) {
+    eventSource.close();
+  }
+  setConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '正在建立实时连接...' : '网络断开，等待恢复');
+
+  const source = new EventSource(`/game/${roomId}/events`);
+  eventSource = source;
+
+  source.addEventListener('open', () => {
+    if (eventSource !== source) return;
+    const shouldResync = hasSSEConnected;
+    hasSSEConnected = true;
+    sseReconnectAttempts = 0;
+    clearSSEReconnectTimer();
+    stopStateSyncPolling();
+    setConnectionStatus('connected');
+    if (shouldResync) {
+      initGameState({ silent: true, reason: 'sse_reopened' });
+    }
+  });
 
   // 游戏开始事件（第一回合）
-  eventSource.addEventListener('game_start', (e) => {
-    const data = JSON.parse(e.data);
-    setRoundDisplay(data.round_number, data.total_rounds);
-    currentRoundId = data.round_id || '';
-    document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
-    document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
-    document.getElementById('subject-name').textContent = data.subject_nickname;
-    document.getElementById('subject-avatar').textContent = data.subject_nickname[0];
-
-    // 更新角色状态
-    isCurrentInterrogator = (data.interrogator_nickname === myNickname);
-    isCurrentSubject = (data.subject_nickname === myNickname);
-
-    // 重置显示
-    document.getElementById('question-text').textContent = '等待提问...';
-    document.getElementById('answer-text').textContent = '等待回答...';
-    document.getElementById('question-input').value = '';
-    document.getElementById('answer-input').value = '';
-    document.getElementById('answer-content').classList.add('hidden');
-    document.getElementById('loading-area').classList.add('hidden');
-    myLastVote = '';
-    resetRoundFeedback();
-    resetDraftSyncState();
-
+  source.addEventListener('game_start', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
+    applyRoundIdentity(data);
+    resetRoundViewForQuestioning();
     updatePhaseDisplay('questioning');
   });
 
   // 新回合事件（后续轮次）
-  eventSource.addEventListener('new_round', (e) => {
-    const data = JSON.parse(e.data);
-    setRoundDisplay(data.round_number, data.total_rounds);
-    currentRoundId = data.round_id || '';
-    document.getElementById('interrogator-name').textContent = data.interrogator_nickname;
-    document.getElementById('interrogator-avatar').textContent = data.interrogator_nickname[0];
-    document.getElementById('subject-name').textContent = data.subject_nickname;
-    document.getElementById('subject-avatar').textContent = data.subject_nickname[0];
-
-    // 更新角色状态
-    isCurrentInterrogator = (data.interrogator_nickname === myNickname);
-    isCurrentSubject = (data.subject_nickname === myNickname);
-
-    // 重置显示
-    document.getElementById('question-text').textContent = '等待提问...';
-    document.getElementById('answer-text').textContent = '等待回答...';
-    document.getElementById('question-input').value = '';
-    document.getElementById('answer-input').value = '';
-    document.getElementById('answer-content').classList.add('hidden');
-    document.getElementById('loading-area').classList.add('hidden');
-    myLastVote = '';
-    resetRoundFeedback();
-    resetDraftSyncState();
-
+  source.addEventListener('new_round', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
+    applyRoundIdentity(data);
+    resetRoundViewForQuestioning();
     updatePhaseDisplay('questioning');
   });
 
-  eventSource.addEventListener('new_question', (e) => {
-    const data = JSON.parse(e.data);
-    document.getElementById('question-text').textContent = data.question;
+  source.addEventListener('new_question', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
+    document.getElementById('question-text').textContent = data.question || '等待提问...';
     updatePhaseDisplay('answering');
   });
 
-  eventSource.addEventListener('answer_phase', (e) => {
+  source.addEventListener('answer_phase', (e) => {
+    if (eventSource !== source) return;
     const data = JSON.parse(e.data || '{}');
     if (data.question) {
       document.getElementById('question-text').textContent = data.question;
@@ -464,7 +561,8 @@ function connectSSE() {
     updatePhaseDisplay('answering');
   });
 
-  eventSource.addEventListener('answer_submitted', (e) => {
+  source.addEventListener('answer_submitted', (e) => {
+    if (eventSource !== source) return;
     const data = JSON.parse(e.data || '{}');
     document.getElementById('loading-area').classList.remove('hidden');
     document.getElementById('answer-content').classList.add('hidden');
@@ -482,46 +580,70 @@ function connectSSE() {
     }
   });
 
-  eventSource.addEventListener('new_answer', (e) => {
-    const data = JSON.parse(e.data);
+  source.addEventListener('new_answer', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
     document.getElementById('loading-area').classList.add('hidden');
     document.getElementById('answer-content').classList.remove('hidden');
-    document.getElementById('answer-text').textContent = data.answer;
+    document.getElementById('answer-text').textContent = data.answer || '（未作答）';
     // 隐藏回答类型标签（双方都无法看到是否是 AI 回答）
     document.getElementById('answer-type-label').classList.add('hidden');
     updatePhaseDisplay('voting');
   });
 
-  eventSource.addEventListener('voting_phase', () => {
+  source.addEventListener('voting_phase', () => {
+    if (eventSource !== source) return;
     updatePhaseDisplay('voting');
+    if (myLastVote && !isCurrentSubject) {
+      document.getElementById('vote-area').classList.add('hidden');
+      document.getElementById('wait-area').classList.remove('hidden');
+      document.getElementById('wait-area').querySelector('p').textContent = '你已投票，等待其他玩家...';
+    }
   });
 
-  eventSource.addEventListener('countdown', (e) => {
-    const data = JSON.parse(e.data);
+  source.addEventListener('countdown', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
     // 使用服务器时间同步本地倒计时，避免跳来跳去
     // 根据当前阶段设置总时长
     const totalTime = phaseDurations[data.phase] || countdownTotal || phaseDurations.questioning;
-    
+
     // 同步剩余时间并启动本地倒计时
     startLocalCountdown(data.remaining, totalTime);
   });
 
-  eventSource.addEventListener('round_result', (e) => {
-    const data = JSON.parse(e.data);
-    updateScoreBoard(data.player_scores);
+  source.addEventListener('round_result', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
+    updateScoreBoard(data.player_scores || []);
     renderRoundFeedback(data);
     updatePhaseDisplay('revealed');
     applyBgmForRoundResult(data);
   });
 
-  eventSource.addEventListener('game_over', (e) => {
-    const data = JSON.parse(e.data);
+  source.addEventListener('game_over', (e) => {
+    if (eventSource !== source) return;
+    const data = JSON.parse(e.data || '{}');
+    stopStateSyncPolling();
     window.location.href = `/game/${roomId}/result?data=` + encodeURIComponent(JSON.stringify(data));
   });
 
-  eventSource.onerror = () => {
-    console.log('SSE connection error, reconnecting...');
+  source.onerror = () => {
+    if (eventSource !== source) return;
+    markSSEUnhealthy(reason || 'sse_error');
+    if (source.readyState === EventSource.CLOSED) {
+      scheduleSSEReconnect('sse_closed');
+    }
   };
+}
+
+function forceReconnectSSE(reason = 'manual') {
+  if (!navigator.onLine) {
+    setConnectionStatus('offline', '当前离线，已等待自动恢复');
+    return;
+  }
+  clearSSEReconnectTimer();
+  connectSSE(reason);
 }
 
 function updatePhaseDisplay(phase) {
@@ -772,75 +894,140 @@ let isCurrentInterrogator = false;
 let isCurrentSubject = false;
 let myNickname = '';
 
-// 页面加载时获取当前回合状态（用于刷新页面后恢复状态）
-async function initGameState() {
+function redirectByRoomPhase(phase) {
+  const normalized = String(phase || '').trim().toLowerCase();
+  if (normalized === 'setup') {
+    window.location.href = `/game/${roomId}/setup`;
+    return true;
+  }
+  if (normalized === 'waiting') {
+    window.location.href = `/game/${roomId}`;
+    return true;
+  }
+  if (normalized === 'finished') {
+    window.location.href = `/game/${roomId}/result`;
+    return true;
+  }
+  return false;
+}
+
+function applyRoundSnapshot(round) {
+  if (!round) return;
+  applyRoundIdentity(round);
+
+  const questionText = String(round.question || '').trim();
+  const answerText = String(round.answer || '').trim();
+  const isAnswerVisible = Boolean(round.is_answer_visible);
+  const isAnswerSubmitted = Boolean(round.is_answer_submitted);
+  const questionInput = document.getElementById('question-input');
+  const answerInput = document.getElementById('answer-input');
+  const loadingArea = document.getElementById('loading-area');
+  const answerContent = document.getElementById('answer-content');
+
+  document.getElementById('question-text').textContent = questionText || '等待提问...';
+
+  if (questionInput) {
+    const remoteQuestionDraft = String(round.my_question_draft || '');
+    if (isCurrentInterrogator && round.status === 'questioning' && !questionText && remoteQuestionDraft && !questionInput.value.trim()) {
+      questionInput.value = remoteQuestionDraft;
+    }
+    if (remoteQuestionDraft) {
+      lastQuestionDraft = remoteQuestionDraft;
+    }
+  }
+
+  if (answerInput) {
+    const remoteAnswerDraft = String(round.my_answer_draft || '');
+    if (isCurrentSubject && round.status === 'answering' && !isAnswerSubmitted && remoteAnswerDraft && !answerInput.value.trim()) {
+      answerInput.value = remoteAnswerDraft;
+    }
+    if (remoteAnswerDraft) {
+      lastAnswerDraft = remoteAnswerDraft;
+    }
+  }
+
+  if (isAnswerVisible && answerText) {
+    loadingArea.classList.add('hidden');
+    answerContent.classList.remove('hidden');
+    document.getElementById('answer-text').textContent = answerText;
+    document.getElementById('answer-type-label').classList.add('hidden');
+  } else {
+    answerContent.classList.add('hidden');
+    document.getElementById('answer-text').textContent = '等待回答...';
+    if (round.status === 'answering' && (isAnswerSubmitted || !isCurrentSubject)) {
+      loadingArea.classList.remove('hidden');
+    } else {
+      loadingArea.classList.add('hidden');
+    }
+  }
+
+  updatePhaseDisplay(round.status);
+  myLastVote = String(round.my_vote || '').trim();
+
+  // 断线重连后若已提交回答/投票，强制回到等待态，避免继续展示可操作按钮。
+  if (round.status === 'answering' && isCurrentSubject && isAnswerSubmitted) {
+    document.getElementById('answer-choice-area').classList.add('hidden');
+    document.getElementById('answer-input-area').classList.add('hidden');
+    document.getElementById('wait-area').classList.remove('hidden');
+    document.getElementById('wait-area').querySelector('p').textContent = '你已提交回答，等待本阶段结束...';
+  }
+  if (round.status === 'voting' && !isCurrentSubject && myLastVote) {
+    document.getElementById('vote-area').classList.add('hidden');
+    document.getElementById('wait-area').classList.remove('hidden');
+    document.getElementById('wait-area').querySelector('p').textContent = '你已投票，等待其他玩家...';
+  }
+}
+
+// 页面加载和重连后都调用该方法，确保丢失 SSE 事件时可以从服务端快照恢复 UI。
+async function initGameState(options = {}) {
+  const silent = Boolean(options?.silent);
+  if (isSyncingGameState) return;
+  isSyncingGameState = true;
+
   try {
-    console.log('Initializing game state...');
-
-    // 先获取房间状态以确定当前玩家昵称
-    const roomRes = await fetch(`/game/api/${roomId}/state`);
+    const roomRes = await fetch(`/game/api/${roomId}/state`, { cache: 'no-store' });
     const roomData = await roomRes.json();
-    console.log('Room state:', roomData);
 
-    if (roomData.success && roomData.players) {
-      setRoundDisplay(roomData.room?.current_round, roomData.room?.total_rounds);
-      const me = roomData.players.find(p => p.id === playerId);
-      if (me) {
-        myNickname = me.nickname;
-        console.log('My nickname:', myNickname);
-      } else {
-        console.warn('Player not found in room');
+    if (!roomData.success || !roomData.room) {
+      if (!silent) {
+        console.warn('房间状态恢复失败：', roomData.error || '未知错误');
       }
-      // 更新玩家得分显示
-      const playerScores = roomData.players.map(p => ({
-        id: p.id,
-        nickname: p.nickname,
-        score: p.score || 0
+      return;
+    }
+
+    setRoundDisplay(roomData.room.current_round, roomData.room.total_rounds);
+    if (redirectByRoomPhase(roomData.room.phase)) return;
+
+    if (Array.isArray(roomData.players)) {
+      const me = roomData.players.find((player) => player.id === playerId);
+      if (me) {
+        myNickname = String(me.nickname || '');
+      }
+      const playerScores = roomData.players.map((player) => ({
+        id: player.id,
+        nickname: player.nickname,
+        score: player.score || 0,
       }));
       updateScoreBoard(playerScores);
     }
 
-    // 获取当前回合
-    const res = await fetch(`/game/api/${roomId}/round`);
-    const data = await res.json();
-    console.log('Round data:', data);
+    const roundRes = await fetch(`/game/api/${roomId}/round`, { cache: 'no-store' });
+    const roundData = await roundRes.json();
+    if (roundData.success && roundData.round) {
+      applyRoundSnapshot(roundData.round);
+      return;
+    }
 
-    if (data.success && data.round) {
-      const round = data.round;
-      currentRoundId = round.id;
-      setRoundDisplay(round.round_number, round.total_rounds);
-      document.getElementById('interrogator-name').textContent = round.interrogator_nickname;
-      document.getElementById('interrogator-avatar').textContent = round.interrogator_nickname[0];
-      document.getElementById('subject-name').textContent = round.subject_nickname;
-      document.getElementById('subject-avatar').textContent = round.subject_nickname[0];
-
-      // 判断当前玩家角色
-      isCurrentInterrogator = (round.interrogator_nickname === myNickname);
-      isCurrentSubject = (round.subject_nickname === myNickname);
-      console.log('Role - Interrogator:', isCurrentInterrogator, 'Subject:', isCurrentSubject);
-
-      // 更新问题和回答显示
-      if (round.question) {
-        document.getElementById('question-text').textContent = round.question;
-      }
-
-      if (round.answer) {
-        document.getElementById('loading-area').classList.add('hidden');
-        document.getElementById('answer-content').classList.remove('hidden');
-        document.getElementById('answer-text').textContent = round.answer;
-        // 隐藏回答类型标签（双方都无法看到是否是 AI 回答）
-        document.getElementById('answer-type-label').classList.add('hidden');
-      }
-
-      // 根据状态更新阶段显示
-      updatePhaseDisplay(round.status);
-    } else {
-      console.warn('No round data available:', data.error || 'Unknown error');
-      // 显示等待信息
-      document.getElementById('phase-display').textContent = '等待游戏开始...';
+    if (redirectByRoomPhase(roundData.phase)) return;
+    if (!silent) {
+      console.warn('回合状态恢复失败：', roundData.error || '未知错误');
     }
   } catch (e) {
-    console.error('Failed to init game state:', e);
+    if (!silent) {
+      console.error('Failed to init game state:', e);
+    }
+  } finally {
+    isSyncingGameState = false;
   }
 }
 
@@ -895,17 +1082,45 @@ function flushDraftOnBeforeUnload() {
   }
 }
 
+function handleNetworkOnline() {
+  setConnectionStatus('reconnecting', '网络已恢复，正在重连...');
+  initGameState({ silent: true, reason: 'network_online' });
+  forceReconnectSSE('network_online');
+}
+
+function handleNetworkOffline() {
+  markSSEUnhealthy('network_offline');
+}
+
+function handlePageVisible() {
+  if (document.hidden) return;
+  initGameState({ silent: true, reason: 'page_visible' });
+  if (!eventSource || eventSource.readyState !== EventSource.OPEN) {
+    forceReconnectSSE('page_visible');
+  }
+}
+
 // 页面加载时先获取状态，再连接 SSE
 lockAnswerInputPaste();
 document.getElementById('question-input').addEventListener('input', scheduleQuestionDraftSync);
 document.getElementById('answer-input').addEventListener('input', scheduleAnswerDraftSync);
-initGameState().then(() => {
-  connectSSE();
+window.addEventListener('online', handleNetworkOnline);
+window.addEventListener('offline', handleNetworkOffline);
+document.addEventListener('visibilitychange', handlePageVisible);
+
+setConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复');
+initGameState({ reason: 'initial_load' }).then(() => {
+  connectSSE('initial_load');
 });
 
 window.addEventListener('beforeunload', () => {
   flushDraftOnBeforeUnload();
   stopLocalCountdown();
+  stopStateSyncPolling();
+  clearSSEReconnectTimer();
+  window.removeEventListener('online', handleNetworkOnline);
+  window.removeEventListener('offline', handleNetworkOffline);
+  document.removeEventListener('visibilitychange', handlePageVisible);
   if (eventSource) {
     eventSource.close();
   }

@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from pathlib import Path
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -14,6 +15,7 @@ from beanie import PydanticObjectId
 
 from app.models.game_player import GamePlayer
 from app.models.game_room import GameRoom
+from app.models.vote_record import VoteRecord
 from app.services import ai_chat_service, config_service, game_manager, game_room_service, prompt_templates_service, sse_manager
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,6 +23,13 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/game")
+
+
+def _to_utc_iso(value: datetime | None) -> str | None:
+    """将时间统一格式化为 UTC ISO 字符串，便于前端断线后恢复计时状态。"""
+    if not value:
+        return None
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def _get_player_from_cookie(request: Request) -> tuple[str, str] | None:
@@ -680,7 +689,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
             "current_round": room.current_round,
             "total_rounds": room.total_rounds,
             "config": room.config.model_dump(),
-            "started_at": room.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if room.started_at else None,
+            "started_at": _to_utc_iso(room.started_at),
         },
         "players": [
             {
@@ -696,7 +705,7 @@ async def get_room_state(room_id: str) -> dict[str, Any]:
 
 
 @router.get("/api/{room_id}/round")
-async def get_current_round(room_id: str) -> dict[str, Any]:
+async def get_current_round(request: Request, room_id: str) -> dict[str, Any]:
     """获取当前回合状态（API）。"""
     from app.models.game_round import GameRound
 
@@ -720,6 +729,41 @@ async def get_current_round(room_id: str) -> dict[str, Any]:
     players = await game_room_service.get_players_in_room(room.room_id)
     interrogator = next((p for p in players if str(p.id) == current_round.interrogator_id), None)
     subject = next((p for p in players if str(p.id) == current_round.subject_id), None)
+    current_player = await _get_authed_player(request, room)
+    current_player_id = str(current_player.id) if current_player else ""
+
+    # 回答仅在“已展示”或已进入投票/结算阶段时对外返回，避免断线重连时提前泄露答案。
+    is_answer_visible = bool(current_round.answer_displayed_at) or current_round.status in {"voting", "revealed"}
+    is_answer_submitted = bool(current_round.answer_submitted_at) or bool(str(current_round.answer or "").strip())
+
+    my_vote = ""
+    if current_player_id:
+        vote_record = await VoteRecord.find_one(
+            {
+                "room_id": room.room_id,
+                "round_number": current_round.round_number,
+                "voter_id": current_player_id,
+            }
+        )
+        my_vote = str(vote_record.vote) if vote_record else ""
+
+    my_question_draft = ""
+    if (
+        current_player_id
+        and current_round.interrogator_id == current_player_id
+        and current_round.status == "questioning"
+        and not str(current_round.question or "").strip()
+    ):
+        my_question_draft = str(current_round.question_draft or "")
+
+    my_answer_draft = ""
+    if (
+        current_player_id
+        and current_round.subject_id == current_player_id
+        and current_round.status == "answering"
+        and not str(current_round.answer or "").strip()
+    ):
+        my_answer_draft = str(current_round.answer_draft or "")
 
     return {
         "success": True,
@@ -729,11 +773,18 @@ async def get_current_round(room_id: str) -> dict[str, Any]:
             "total_rounds": room.total_rounds,
             "status": current_round.status,
             "question": current_round.question,
-            "answer": current_round.answer,
+            "answer": current_round.answer if is_answer_visible else "",
             "answer_type": current_round.answer_type,
+            "is_answer_visible": is_answer_visible,
+            "is_answer_submitted": is_answer_submitted,
+            "answer_submitted_at": _to_utc_iso(current_round.answer_submitted_at),
+            "answer_displayed_at": _to_utc_iso(current_round.answer_displayed_at),
             "interrogator_id": current_round.interrogator_id,
             "interrogator_nickname": interrogator.nickname if interrogator else "未知",
             "subject_id": current_round.subject_id,
             "subject_nickname": subject.nickname if subject else "未知",
+            "my_vote": my_vote,
+            "my_question_draft": my_question_draft,
+            "my_answer_draft": my_answer_draft,
         },
     }
