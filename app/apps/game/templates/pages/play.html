@@ -3,7 +3,19 @@
 {% block title %}游戏进行中 - 图灵测试{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4 pb-4 pt-20 md:p-4">
+  <!-- 移动端固定倒计时条：滚动时始终可见，避免错过提问/回答/投票时限。 -->
+  <div class="fixed inset-x-0 z-50 px-3 md:hidden pointer-events-none" style="top: calc(env(safe-area-inset-top, 0px) + 8px);">
+    <div class="mx-auto max-w-md rounded-xl border border-white/20 bg-slate-900/80 px-3 py-2 backdrop-blur-md shadow-lg">
+      <div class="flex items-center justify-between text-xs text-purple-100">
+        <span class="font-medium">第 <span id="mobile-round-number">{{ current_round }}</span>/<span id="mobile-total-rounds">{{ room.total_rounds }}</span> 回合 · <span id="mobile-phase-display">等待中...</span></span>
+        <span class="text-base font-bold text-purple-200"><span id="mobile-countdown">--</span>s</span>
+      </div>
+      <div class="mt-2 h-1.5 bg-white/20 rounded-full overflow-hidden">
+        <div id="mobile-progress-bar" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-1000" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
   <div class="max-w-4xl mx-auto">
     <!-- 顶部信息栏 -->
     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-4">
@@ -323,9 +335,23 @@ function startLocalCountdown(remaining, total) {
 
 // 更新倒计时显示
 function updateCountdownDisplay() {
-  document.getElementById('countdown').textContent = countdownRemaining;
+  const desktopCountdown = document.getElementById('countdown');
+  const mobileCountdown = document.getElementById('mobile-countdown');
+  if (desktopCountdown) {
+    desktopCountdown.textContent = countdownRemaining;
+  }
+  if (mobileCountdown) {
+    mobileCountdown.textContent = countdownRemaining;
+  }
   const percent = countdownTotal > 0 ? (countdownRemaining / countdownTotal) * 100 : 0;
-  document.getElementById('progress-bar').style.width = `${percent}%`;
+  const desktopProgressBar = document.getElementById('progress-bar');
+  const mobileProgressBar = document.getElementById('mobile-progress-bar');
+  if (desktopProgressBar) {
+    desktopProgressBar.style.width = `${percent}%`;
+  }
+  if (mobileProgressBar) {
+    mobileProgressBar.style.width = `${percent}%`;
+  }
 }
 
 // 停止本地倒计时
@@ -341,10 +367,30 @@ function setRoundDisplay(roundNumber, totalRoundNumber) {
   if (Number.isFinite(Number(roundNumber))) {
     currentRound = Number(roundNumber);
     document.getElementById('round-number').textContent = String(currentRound);
+    const mobileRoundNumber = document.getElementById('mobile-round-number');
+    if (mobileRoundNumber) {
+      mobileRoundNumber.textContent = String(currentRound);
+    }
   }
   if (Number.isFinite(Number(totalRoundNumber))) {
     totalRounds = Number(totalRoundNumber);
     document.getElementById('total-rounds').textContent = String(totalRounds);
+    const mobileTotalRounds = document.getElementById('mobile-total-rounds');
+    if (mobileTotalRounds) {
+      mobileTotalRounds.textContent = String(totalRounds);
+    }
+  }
+}
+
+function setPhaseDisplayText(text) {
+  const normalizedText = String(text || '等待中...');
+  const desktopPhaseDisplay = document.getElementById('phase-display');
+  const mobilePhaseDisplay = document.getElementById('mobile-phase-display');
+  if (desktopPhaseDisplay) {
+    desktopPhaseDisplay.textContent = normalizedText;
+  }
+  if (mobilePhaseDisplay) {
+    mobilePhaseDisplay.textContent = normalizedText;
   }
 }
 
@@ -569,7 +615,7 @@ function connectSSE(reason = 'init') {
 
     // 回答阶段计时归零后，统一展示随机“输入中”时长，避免通过点击快慢猜测回答类型。
     const typingDelay = Math.max(0, Math.ceil(Number(data.display_delay || 0)));
-    document.getElementById('phase-display').textContent = '输入中';
+    setPhaseDisplayText('输入中');
     if (typingDelay > 0) {
       startLocalCountdown(typingDelay, typingDelay);
     } else {
@@ -668,7 +714,7 @@ function updatePhaseDisplay(phase) {
     'voting': '投票阶段',
     'revealed': '结果揭晓'
   };
-  document.getElementById('phase-display').textContent = phaseNames[phase] || phase;
+  setPhaseDisplayText(phaseNames[phase] || phase);
   applyBgmForPhase(phase);
 
   // 显示/隐藏操作区域
