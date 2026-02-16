@@ -38,7 +38,19 @@
 </head>
 
 <body class="antialiased min-h-screen max-w-full overflow-x-hidden overscroll-none bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
-  {% block content %}{% endblock %}
+  {% set soft_nav_enabled = enable_soft_nav | default(false, true) %}
+  <main
+    id="game-page-main"
+    {% if soft_nav_enabled %}
+    hx-boost="true"
+    hx-push-url="true"
+    hx-target="#game-page-main"
+    hx-select="#game-page-main"
+    hx-swap="outerHTML"
+    {% endif %}
+  >
+    {% block content %}{% endblock %}
+  </main>
 
   <audio id="game-bgm-player" preload="none" loop class="hidden"></audio>
   <div

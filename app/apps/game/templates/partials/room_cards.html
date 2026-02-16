@@ -27,15 +27,23 @@
           </div>
 
           <div class="mt-4">
-            <button
-              type="button"
-              class="btn-primary w-full {% if not room.can_join %}opacity-50 cursor-not-allowed{% endif %}"
-              {% if not room.can_join %}disabled{% endif %}
-              data-join-room="{{ room.room_code }}"
-              x-on:click="openJoin('{{ room.room_code }}', {{ room.has_password | tojson }}, {{ room.can_join | tojson }})"
-            >
-              {% if room.can_join %}加入房间{% else %}房间已满{% endif %}
-            </button>
+            {% if room.can_join %}
+              <a
+                href="/game/join?room={{ room.room_code }}"
+                class="btn-primary inline-flex w-full items-center justify-center"
+                data-join-room="{{ room.room_code }}"
+              >
+                加入房间
+              </a>
+            {% else %}
+              <button
+                type="button"
+                class="btn-primary w-full cursor-not-allowed opacity-50"
+                disabled
+              >
+                房间已满
+              </button>
+            {% endif %}
           </div>
         </div>
       {% endfor %}
@@ -43,8 +51,8 @@
   {% else %}
     <div class="rounded-2xl border border-dashed border-white/20 bg-white/5 p-10 text-center">
       <p class="text-xl font-semibold text-white">暂无可加入房间</p>
-      <p class="text-sm text-purple-200 mt-2">你可以先去首页创建房间，再邀请朋友加入。</p>
-      <a href="/game" class="btn-primary inline-flex mt-4">去创建房间</a>
+      <p class="text-sm text-purple-200 mt-2">你可以先去创建房间，再邀请朋友加入。</p>
+      <a href="/game/create" class="btn-primary inline-flex mt-4">去创建房间</a>
     </div>
   {% endif %}
 </div>

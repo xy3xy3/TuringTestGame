@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}加入房间 - 图灵测试{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 pb-16 md:p-6 md:pb-20 lg:p-8 lg:pb-24">
+  <div class="mx-auto w-full max-w-2xl">
+    <div class="mb-6 text-center">
+      <div class="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+        <i class="fa-solid fa-robot text-4xl text-white"></i>
+      </div>
+      <h1 class="mb-2 text-4xl font-bold text-white">图灵测试</h1>
+      <p class="text-purple-200">加入房间</p>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-2xl bg-white/10 p-5 backdrop-blur-md">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-white">加入房间</h1>
+            <p class="mt-1 text-sm text-purple-200">输入房间号与昵称后即可加入</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="/game" class="btn-secondary">房间列表</a>
+            <a href="/game/create" class="btn-secondary">创建房间</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white/10 p-6 backdrop-blur-md">
+        <form id="join-form" method="post" action="/game/join" hx-post="/game/join" hx-target="#join-result" hx-swap="innerHTML" hx-select="unset" hx-push-url="false">
+          <div class="space-y-4">
+            <div>
+              <label class="mb-1 block text-sm text-purple-200">房间号</label>
+              <input
+                type="text"
+                id="join-room-code"
+                name="room_code"
+                class="input w-full"
+                placeholder="输入房间号"
+                value="{{ invite_room_code | default('', true) }}"
+                required
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm text-purple-200">你的昵称</label>
+              <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm text-purple-200">房间密码（可选）</label>
+              <input
+                type="text"
+                id="join-password"
+                name="password"
+                class="input w-full"
+                placeholder="如果房间有密码"
+                value="{{ invite_password | default('', true) }}"
+              />
+            </div>
+            <button type="submit" class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
+          </div>
+        </form>
+        <div id="join-result" class="mt-4"></div>
+      </div>
+    </div>
+    <div class="h-6 md:h-8"></div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    // 校验昵称，避免提交过短昵称造成后端报错。
+    const initJoinFormValidation = () => {
+      const form = document.getElementById('join-form');
+      if (!form) return;
+      const nicknameInput = form.querySelector('input[name="nickname"]');
+      const resultDiv = document.getElementById('join-result');
+      if (!nicknameInput || !resultDiv) return;
+
+      nicknameInput.addEventListener('input', function() {
+        if (this.value.length > 0 && this.value.length < 2) {
+          this.setCustomValidity('昵称至少需要2个字符');
+        } else {
+          this.setCustomValidity('');
+        }
+      });
+
+      form.addEventListener('htmx:beforeRequest', function(evt) {
+        const roomCode = String(form.querySelector('input[name="room_code"]')?.value || '').trim();
+        const nickname = nicknameInput.value.trim();
+        if (!roomCode || nickname.length < 2) {
+          evt.preventDefault();
+          resultDiv.innerHTML = '<div class="text-sm text-red-400">请填写房间号，且昵称至少 2 个字符</div>';
+        }
+      });
+    };
+
+    // 按是否预填邀请码决定默认焦点，提升从邀请链接进入时的操作效率。
+    const initJoinFormFocus = () => {
+      const roomInput = document.getElementById('join-room-code');
+      const passwordInput = document.getElementById('join-password');
+      const nicknameInput = document.querySelector('#join-form input[name="nickname"]');
+      if (!roomInput || !nicknameInput) return;
+
+      if (!String(roomInput.value || '').trim()) {
+        roomInput.focus();
+        return;
+      }
+      if (passwordInput && !String(passwordInput.value || '').trim()) {
+        passwordInput.focus();
+        return;
+      }
+      nicknameInput.focus();
+    };
+
+    initJoinFormValidation();
+    initJoinFormFocus();
+  })();
+</script>
+{% endblock %}

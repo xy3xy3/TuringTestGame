@@ -58,10 +58,10 @@ def test_prompt_templates_seed_and_setup_apply(
 
         player_ctx = browser.new_context()
         player_page = player_ctx.new_page()
-        player_page.goto(f"{e2e_base_url}/game", wait_until="networkidle")
+        player_page.goto(f"{e2e_base_url}/game/create", wait_until="networkidle")
         player_page.locator('#create-form input[name="nickname"]').fill("模板测试玩家")
         player_page.get_by_role("button", name="创建房间").click()
-        player_page.wait_for_url("**/game/*", timeout=20_000)
+        player_page.wait_for_url(re.compile(r".*/game/[0-9a-f]{24}$"), timeout=20_000)
 
         room_id = _parse_room_id(player_page.url)
         mongo_client = MongoClient(test_mongo_url)

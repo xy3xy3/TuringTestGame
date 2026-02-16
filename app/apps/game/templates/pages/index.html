@@ -1,19 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}图灵测试游戏{% endblock %}
+{% block title %}房间列表 - 图灵测试{% endblock %}
 
 {% block content %}
-<div
-  class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-6 lg:p-8">
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-6 lg:p-8">
   <div class="mx-auto w-full" style="max-width: 1120px;">
-    <!-- Logo 和标题 -->
-    <div class="text-center mb-8">
-      <div
-        class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mb-4">
+    <div class="mb-6 text-center">
+      <div class="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
         <i class="fa-solid fa-robot text-4xl text-white"></i>
       </div>
-      <h1 class="text-4xl font-bold text-white mb-2">图灵测试</h1>
-      <p class="text-purple-200">你是人还是 AI？一起来挑战吧！</p>
+      <h1 class="mb-2 text-4xl font-bold text-white">图灵测试</h1>
+      <p class="text-purple-200">房间列表首页</p>
     </div>
 
     <div id="resume-game-card" class="mb-6 hidden rounded-2xl border border-green-300/20 bg-green-500/10 p-4 backdrop-blur-md">
@@ -32,194 +29,79 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- 创建房间 -->
-      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
-        <h2 class="text-xl font-semibold text-white mb-4">创建房间</h2>
-        <form id="create-form" hx-post="/game/create" hx-target="#create-result" hx-swap="innerHTML">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-              <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
-            </div>
-            <div>
-              <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-              <input type="text" name="password" class="input w-full" placeholder="留空则不设密码" />
-            </div>
-            <label class="flex items-start gap-2 text-sm text-purple-200">
-              <input
-                type="checkbox"
-                name="bonus_scoring_enabled"
-                value="true"
-                class="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/10 text-purple-500 focus:ring-purple-400"
-              />
-              <span>创建时开启附加给分机制（可在房间大厅继续调整）</span>
-            </label>
-            <button type="submit" class="btn-primary w-full">创建房间</button>
-          </div>
-        </form>
-        <div id="create-result" class="mt-4"></div>
-      </div>
-
-      <!-- 加入房间 -->
-      <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <h2 class="text-xl font-semibold text-white">加入房间</h2>
-          <a href="/game/rooms" class="text-sm text-purple-200 hover:text-white">
-            <i class="fa-solid fa-list mr-1"></i>浏览房间列表
-          </a>
+    <div class="mb-4 rounded-2xl bg-white/10 p-5 backdrop-blur-md">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-bold text-white">房间列表</h2>
+          <p class="mt-1 text-sm text-purple-200">展示所有等待中的房间（含加锁房间）</p>
         </div>
-        <form id="join-form" hx-post="/game/join" hx-target="#join-result" hx-swap="innerHTML">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm text-purple-200 mb-1">房间号</label>
-              <input type="text" id="join-room-code" name="room_code" class="input w-full" placeholder="输入房间号" required />
-            </div>
-            <div>
-              <label class="block text-sm text-purple-200 mb-1">你的昵称</label>
-              <input type="text" name="nickname" class="input w-full" placeholder="输入昵称" minlength="2" maxlength="32" required />
-            </div>
-            <div>
-              <label class="block text-sm text-purple-200 mb-1">房间密码（可选）</label>
-              <input type="text" id="join-password" name="password" class="input w-full" placeholder="如果房间有密码" />
-            </div>
-            <button type="submit"
-              class="btn-primary w-full bg-gradient-to-r from-pink-500 to-purple-500 border-0">加入房间</button>
-          </div>
-        </form>
-        <div id="join-result" class="mt-4"></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="/game/create" class="btn-primary">
+            <i class="fa-solid fa-plus mr-1"></i>创建房间
+          </a>
+          <a href="/game/join" class="btn-secondary">
+            <i class="fa-solid fa-right-to-bracket mr-1"></i>加入房间
+          </a>
+          <button
+            class="btn-secondary"
+            hx-get="/game/rooms/table"
+            hx-target="#room-cards-wrap"
+            hx-swap="outerHTML"
+            hx-select="unset"
+            hx-push-url="false"
+            hx-indicator="#global-indicator"
+          >
+            <i class="fa-solid fa-rotate-right mr-1"></i>刷新
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- 游戏说明 -->
-    <div class="mt-8 text-center text-purple-300 text-sm max-w-2xl mx-auto">
-      <p>游戏规则：</p>
-      <ul class="mt-2 space-y-1 text-left max-w-xs mx-auto">
-        <li>• 每位玩家设置自己的 AI 角色</li>
-        <li>• 轮流提问和回答</li>
-        <li>• 判断回答者是人还是 AI</li>
-        <li>• 每轮所有投票玩家计分：猜对 +50，猜错 -30，跳过 0</li>
-        <li>• 房主可选开启附加给分机制（提问者/被测者额外加分）</li>
+    <section>
+      {% include "partials/room_cards.html" %}
+    </section>
+
+    <div class="mx-auto mt-8 max-w-2xl text-center text-sm text-purple-300">
+      <p>快速开始：</p>
+      <ul class="mx-auto mt-2 max-w-xs space-y-1 text-left">
+        <li>• 房主先创建房间并分享邀请码</li>
+        <li>• 玩家从列表或邀请码进入加入页</li>
+        <li>• 全员准备后开始图灵测试对局</li>
       </ul>
     </div>
   </div>
 </div>
 
 <script>
-  const BONUS_SCORING_PREF_KEY = 'ttg_bonus_scoring_enabled';
+  (() => {
+    // 检测是否存在可恢复的对局，给出“继续上局”入口但不强制跳转。
+    const initResumeGameCard = async () => {
+      const cardEl = document.getElementById('resume-game-card');
+      const detailEl = document.getElementById('resume-game-detail');
+      const btnEl = document.getElementById('resume-game-btn');
+      if (!cardEl || !btnEl || !detailEl) return;
 
-  // 表单验证
-  function validateNickname(formId) {
-    const form = document.getElementById(formId);
-    const nicknameInput = form.querySelector('input[name="nickname"]');
-    const resultDiv = document.getElementById(formId.replace('-form', '-result'));
-
-    nicknameInput.addEventListener('input', function() {
-      if (this.value.length > 0 && this.value.length < 2) {
-        this.setCustomValidity('昵称至少需要2个字符');
-      } else {
-        this.setCustomValidity('');
-      }
-    });
-
-    form.addEventListener('htmx:beforeRequest', function(evt) {
-      const nickname = nicknameInput.value.trim();
-      if (nickname.length < 2) {
-        evt.preventDefault();
-        resultDiv.innerHTML = '<div class="text-red-400 text-sm">昵称至少需要2个字符</div>';
-      }
-    });
-  }
-
-  validateNickname('create-form');
-  validateNickname('join-form');
-
-  // 记住“创建房间时是否开启附加给分机制”的用户选择。
-  function initBonusScoringPreference() {
-    const toggle = document.querySelector('#create-form input[name="bonus_scoring_enabled"]');
-    if (!toggle) return;
-
-    try {
-      const saved = localStorage.getItem(BONUS_SCORING_PREF_KEY);
-      if (saved === '1') {
-        toggle.checked = true;
-      } else if (saved === '0') {
-        toggle.checked = false;
-      }
-    } catch (_error) {
-      // 忽略浏览器禁用 localStorage 的场景。
-    }
-
-    toggle.addEventListener('change', function() {
       try {
-        localStorage.setItem(BONUS_SCORING_PREF_KEY, this.checked ? '1' : '0');
+        const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
+        const response = await requestFn(
+          '/game/reconnect',
+          { method: 'POST' },
+          { timeoutMs: 4500, retries: 1 },
+        );
+        const data = await response.json();
+        if (!data.success || !data.redirect) return;
+
+        detailEl.textContent = `房间号：${data.room_code || '-'} · 当前阶段：${data.phase || 'unknown'}`;
+        btnEl.addEventListener('click', () => {
+          window.location.href = data.redirect;
+        });
+        cardEl.classList.remove('hidden');
       } catch (_error) {
-        // 忽略写入失败，不影响正常创建房间流程。
+        // 静默失败：不影响首页主流程。
       }
-    });
-  }
+    };
 
-  initBonusScoringPreference();
-
-  // 处理邀请链接参数
-  function handleInviteLink() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomCode = urlParams.get('room');
-    const password = urlParams.get('pwd');
-
-    if (roomCode) {
-      // 自动填充房间号
-      const roomInput = document.getElementById('join-room-code');
-      if (roomInput) {
-        roomInput.value = roomCode;
-      }
-
-      // 自动填充密码（如果有）
-      const pwdInput = document.getElementById('join-password');
-      if (pwdInput && password) {
-        pwdInput.value = password;
-      }
-
-      // 如果有房间号，聚焦到昵称输入框
-      if (roomCode) {
-        const nicknameInput = document.querySelector('#join-form input[name="nickname"]');
-        if (nicknameInput) {
-          nicknameInput.focus();
-        }
-      }
-    }
-  }
-
-  // 页面加载时处理邀请链接
-  handleInviteLink();
-
-  // 检测是否存在可恢复的对局，给出“继续上局”入口但不强制跳转。
-  async function initResumeGameCard() {
-    const cardEl = document.getElementById('resume-game-card');
-    const detailEl = document.getElementById('resume-game-detail');
-    const btnEl = document.getElementById('resume-game-btn');
-    if (!cardEl || !btnEl || !detailEl) return;
-
-    try {
-      const requestFn = typeof window.requestWithRetry === 'function' ? window.requestWithRetry : fetch;
-      const response = await requestFn(
-        '/game/reconnect',
-        { method: 'POST' },
-        { timeoutMs: 4500, retries: 1 },
-      );
-      const data = await response.json();
-      if (!data.success || !data.redirect) return;
-
-      detailEl.textContent = `房间号：${data.room_code || '-'} · 当前阶段：${data.phase || 'unknown'}`;
-      btnEl.addEventListener('click', () => {
-        window.location.href = data.redirect;
-      });
-      cardEl.classList.remove('hidden');
-    } catch (_error) {
-      // 静默失败：不影响首页创建/加入主流程。
-    }
-  }
-
-  initResumeGameCard();
+    initResumeGameCard();
+  })();
 </script>
 {% endblock %}

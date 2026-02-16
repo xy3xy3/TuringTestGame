@@ -95,17 +95,17 @@ def _prepare_three_player_game(e2e_base_url: str):
         p2 = p2_ctx.new_page()
         p3 = p3_ctx.new_page()
 
-        owner.goto(f"{e2e_base_url}/game", wait_until="networkidle")
+        owner.goto(f"{e2e_base_url}/game/create", wait_until="networkidle")
         owner.locator('#create-form input[name="nickname"]').fill("P1")
         owner.locator('#create-form input[name="bonus_scoring_enabled"]').check()
         owner.get_by_role("button", name="创建房间").click()
-        owner.wait_for_url("**/game/*", timeout=20_000)
+        owner.wait_for_url(re.compile(r".*/game/[0-9a-f]{24}$"), timeout=20_000)
         room_id = _parse_room_id(owner.url)
         _wait_room_ready(owner)
         room_code = owner.locator("text=房间号：").locator("span").inner_text().strip()
 
         for page, nickname in [(p2, "P2"), (p3, "P3")]:
-            page.goto(f"{e2e_base_url}/game", wait_until="networkidle")
+            page.goto(f"{e2e_base_url}/game/join", wait_until="networkidle")
             page.locator('#join-form input[name="room_code"]').fill(room_code)
             page.locator('#join-form input[name="nickname"]').fill(nickname)
             page.get_by_role("button", name="加入房间").click()

@@ -86,10 +86,10 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         p2 = p2_ctx.new_page()
 
         # 1) 房主创建房间
-        owner.goto(f"{e2e_base_url}/game", wait_until="networkidle")
+        owner.goto(f"{e2e_base_url}/game/create", wait_until="networkidle")
         owner.locator('#create-form input[name="nickname"]').fill("P1")
         owner.get_by_role("button", name="创建房间").click()
-        owner.wait_for_url("**/game/*", timeout=20_000)
+        owner.wait_for_url(re.compile(r".*/game/[0-9a-f]{24}$"), timeout=20_000)
         room_id = _parse_room_id(owner.url)
         _wait_room_ready(owner)
 
@@ -97,7 +97,7 @@ def test_game_two_players_full_flow_and_leaderboard(e2e_base_url: str) -> None:
         assert room_code
 
         # 2) 第二名玩家加入
-        p2.goto(f"{e2e_base_url}/game", wait_until="networkidle")
+        p2.goto(f"{e2e_base_url}/game/join", wait_until="networkidle")
         p2.locator('#join-form input[name="room_code"]').fill(room_code)
         p2.locator('#join-form input[name="nickname"]').fill("P2")
         p2.get_by_role("button", name="加入房间").click()

@@ -8,6 +8,7 @@ from typing import Any
 
 from pathlib import Path
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -106,41 +107,78 @@ async def _list_waiting_room_rows() -> list[dict[str, Any]]:
     return rows
 
 
-@router.get("", response_class=HTMLResponse)
-async def game_index(request: Request) -> HTMLResponse:
-    """游戏首页。"""
-    # 获取邀请链接参数
-    room_code = request.query_params.get("room", "")
-    password = request.query_params.get("pwd", "")
-
+async def _render_room_list_page(request: Request) -> HTMLResponse:
+    """渲染前台房间列表页（仅展示等待中的房间）。"""
+    rooms = await _list_waiting_room_rows()
     return templates.TemplateResponse(
         "pages/index.html",
+        {
+            "request": request,
+            "rooms": rooms,
+            "bgm_stage": "waiting",
+            "enable_soft_nav": True,
+        },
+    )
+
+
+@router.get("", response_class=HTMLResponse)
+async def game_index(request: Request) -> HTMLResponse:
+    """游戏首页（仅展示房间列表）。"""
+    room_code = str(request.query_params.get("room", "")).strip()
+    password = str(request.query_params.get("pwd", "")).strip()
+    # 兼容历史邀请链接：/game?room=xxxx&pwd=yyyy 自动跳到独立加入页。
+    if room_code:
+        query_params = {"room": room_code}
+        if password:
+            query_params["pwd"] = password
+        return RedirectResponse(url=f"/game/join?{urlencode(query_params)}", status_code=302)
+
+    return await _render_room_list_page(request)
+
+
+@router.get("/create", response_class=HTMLResponse)
+async def game_create_page(request: Request) -> HTMLResponse:
+    """创建房间页面。"""
+    return templates.TemplateResponse(
+        "pages/create.html",
+        {
+            "request": request,
+            "bgm_stage": "waiting",
+            "enable_soft_nav": True,
+        },
+    )
+
+
+@router.get("/join", response_class=HTMLResponse)
+async def game_join_page(request: Request) -> HTMLResponse:
+    """加入房间页面。"""
+    room_code = str(request.query_params.get("room", "")).strip()
+    password = str(request.query_params.get("pwd", "")).strip()
+    return templates.TemplateResponse(
+        "pages/join.html",
         {
             "request": request,
             "invite_room_code": room_code,
             "invite_password": password,
             "bgm_stage": "waiting",
+            "enable_soft_nav": True,
         },
     )
 
 
 @router.get("/rooms", response_class=HTMLResponse)
 async def game_rooms_page(request: Request) -> HTMLResponse:
-    """房间列表页（前台）。"""
-    rooms = await _list_waiting_room_rows()
-    return templates.TemplateResponse(
-        "pages/rooms.html",
-        {
-            "request": request,
-            "rooms": rooms,
-            "bgm_stage": "waiting",
-        },
-    )
+    """兼容旧路径：房间列表页。"""
+    return await _render_room_list_page(request)
 
 
 @router.get("/rooms/table", response_class=HTMLResponse)
 async def game_rooms_table(request: Request) -> HTMLResponse:
     """房间列表 partial。"""
+    # 非 HTMX 直开该地址时回退完整页面，避免刷新后只剩局部片段。
+    if request.headers.get("HX-Request") != "true":
+        return await _render_room_list_page(request)
+
     rooms = await _list_waiting_room_rows()
     return templates.TemplateResponse(
         "partials/room_cards.html",
@@ -224,10 +262,10 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
 
     # 生成邀请链接
     base_url = await config_service.get_base_url()
-    invite_params = f"?room={room.room_id}"
+    invite_query = {"room": room.room_id}
     if room.password:
-        invite_params += f"&pwd={room.password}"
-    invite_link = f"{base_url}/game{invite_params}"
+        invite_query["pwd"] = room.password
+    invite_link = f"{base_url}/game/join?{urlencode(invite_query)}"
 
     return templates.TemplateResponse(
         "pages/room.html",
