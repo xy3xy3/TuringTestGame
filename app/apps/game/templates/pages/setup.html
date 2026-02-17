@@ -41,7 +41,14 @@
           <li>• "你是一个严谨的物理学家，喜欢用专业术语"</li>
           <li>• "你是一个 7 岁小孩，满是错别字"</li>
         </ul>
-        <form id="setup-form" hx-post="/game/{{ room.id }}/setup" hx-target="#setup-result" hx-swap="innerHTML">
+        <form
+          id="setup-form"
+          hx-post="/game/{{ room.id }}/setup"
+          hx-target="#setup-result"
+          hx-swap="innerHTML"
+          hx-select="unset"
+          hx-push-url="false"
+        >
           <div class="mb-4">
             <label class="block text-sm text-purple-200 mb-1">快捷套用模板</label>
             <select id="prompt-template-select" class="input w-full">
@@ -112,6 +119,7 @@
 </div>
 
 <script>
+(() => {
 const roomId = '{{ room.id }}';
 const setupTime = {{ room.config.setup_duration }};
 const promptTemplates = {{ prompt_templates | tojson }};
@@ -123,6 +131,18 @@ let setupSSEClient = null;
 let phasePollingTimer = null;
 let lastRemaining = setupTime;
 let roomStateRequestInFlight = null;
+let hasCleanedUp = false;
+
+// setup 页跳转统一走软导航，失败时回退硬跳转。
+function navigateTo(path) {
+  const nextPath = String(path || '').trim();
+  if (!nextPath) return false;
+  if (typeof window.ttgNavigate === 'function') {
+    return window.ttgNavigate(nextPath);
+  }
+  window.location.href = nextPath;
+  return true;
+}
 
 function bindPromptTemplateSelector() {
   const selectEl = document.getElementById('prompt-template-select');
@@ -186,7 +206,7 @@ function navigateToPlay() {
     setupSSEClient.close();
     setupSSEClient = null;
   }
-  window.location.href = `/game/${roomId}/play`;
+  navigateTo(`/game/${roomId}/play`);
 }
 
 function redirectByRoomPhase(phase) {
@@ -197,12 +217,12 @@ function redirectByRoomPhase(phase) {
   }
   if (normalized === 'waiting') {
     hasNavigated = true;
-    window.location.href = `/game/${roomId}`;
+    navigateTo(`/game/${roomId}`);
     return true;
   }
   if (normalized === 'finished') {
     hasNavigated = true;
-    window.location.href = `/game/${roomId}/result`;
+    navigateTo(`/game/${roomId}/result`);
     return true;
   }
   return false;
@@ -347,16 +367,16 @@ setupSSEClient = window.createResilientSSE({
     game_error: (e) => {
       const data = JSON.parse(e.data || '{}');
       alert(data.error || '游戏状态异常');
-      window.location.href = `/game/${roomId}`;
+      navigateTo(`/game/${roomId}`);
     },
   },
 });
 setupSSEClient.connect('setup_initial');
 
-window.forceReconnectSetupSSE = function(reason = 'manual') {
+function forceReconnectSetupSSE(reason = 'manual') {
   if (!setupSSEClient) return;
   setupSSEClient.forceReconnect(reason);
-};
+}
 
 // 测试消息发送
 async function sendTestMessage() {
@@ -425,7 +445,10 @@ async function sendTestMessage() {
   }
 }
 
-window.addEventListener('beforeunload', () => {
+// 页面退出时清理 SSE 与轮询，避免软导航后残留旧连接。
+function cleanupSetupPage() {
+  if (hasCleanedUp) return;
+  hasCleanedUp = true;
   if (phasePollingTimer) {
     clearInterval(phasePollingTimer);
     phasePollingTimer = null;
@@ -438,6 +461,22 @@ window.addEventListener('beforeunload', () => {
     setupSSEClient.close();
     setupSSEClient = null;
   }
-});
+  if (window.forceReconnectSetupSSE === forceReconnectSetupSSE) {
+    delete window.forceReconnectSetupSSE;
+  }
+  if (window.sendTestMessage === sendTestMessage) {
+    delete window.sendTestMessage;
+  }
+}
+
+window.forceReconnectSetupSSE = forceReconnectSetupSSE;
+window.sendTestMessage = sendTestMessage;
+
+if (typeof window.registerGamePageCleanup === 'function') {
+  window.registerGamePageCleanup(cleanupSetupPage);
+} else {
+  window.addEventListener('beforeunload', cleanupSetupPage, { once: true });
+}
+})();
 </script>
 {% endblock %}

@@ -240,6 +240,70 @@
   </script>
   <script>
     (() => {
+      // 注册当前页面的清理回调，供软导航切页前释放 SSE/定时器等资源。
+      let activePageCleanup = null;
+
+      window.registerGamePageCleanup = (cleanupFn) => {
+        if (typeof cleanupFn !== "function") {
+          activePageCleanup = null;
+          return;
+        }
+        activePageCleanup = cleanupFn;
+      };
+
+      window.runGamePageCleanup = (reason = "manual") => {
+        if (typeof activePageCleanup !== "function") return;
+        const cleanup = activePageCleanup;
+        activePageCleanup = null;
+        try {
+          cleanup(reason);
+        } catch (error) {
+          console.warn("game page cleanup failed:", error);
+        }
+      };
+
+      // 统一前台路由跳转：优先 HTMX 软导航，失败时降级为硬跳转。
+      window.ttgNavigate = (path, options = {}) => {
+        const nextPath = String(path || "").trim();
+        if (!nextPath) return false;
+        const mainEl = document.getElementById("game-page-main");
+        const canSoftNavigate = Boolean(
+          typeof window.htmx !== "undefined"
+          && mainEl
+          && mainEl.hasAttribute("hx-boost")
+          && options.soft !== false
+        );
+        if (canSoftNavigate) {
+          try {
+            window.htmx.ajax("GET", nextPath, {
+              target: "#game-page-main",
+              swap: "outerHTML",
+              select: "#game-page-main",
+              push: nextPath,
+            });
+            return true;
+          } catch (error) {
+            console.warn("soft navigate failed, fallback to hard reload:", error);
+          }
+        }
+        window.location.href = nextPath;
+        return false;
+      };
+
+      document.body.addEventListener("htmx:beforeSwap", (event) => {
+        const target = event.detail?.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.id !== "game-page-main") return;
+        window.runGamePageCleanup("before_swap");
+      });
+
+      window.addEventListener("beforeunload", () => {
+        window.runGamePageCleanup("before_unload");
+      });
+    })();
+  </script>
+  <script>
+    (() => {
       const tracks = {{ request.state.game_bgm_config | default({}, true) | tojson }};
       const initialStage = {{ bgm_stage | default("", true) | tojson }};
       const audioEl = document.getElementById("game-bgm-player");

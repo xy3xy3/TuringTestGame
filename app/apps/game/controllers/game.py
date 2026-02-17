@@ -77,6 +77,23 @@ def _redirect_by_phase(room_id: str, phase: str) -> RedirectResponse | None:
     return None
 
 
+def _build_soft_redirect_script(path: str) -> str:
+    """生成跳转脚本：优先软导航，失败时回退硬跳转。"""
+    safe_path = json.dumps(str(path))
+    return (
+        "<script>"
+        "(function(){"
+        f"const nextPath = {safe_path};"
+        "if (typeof window.ttgNavigate === 'function') {"
+        "  window.ttgNavigate(nextPath);"
+        "  return;"
+        "}"
+        "window.location.href = nextPath;"
+        "})();"
+        "</script>"
+    )
+
+
 async def _list_waiting_room_rows() -> list[dict[str, Any]]:
     """查询前台可加入的房间列表（等待中），包含密码标记与人数信息。"""
     rooms = await GameRoom.find({"phase": "waiting"}).sort("-created_at").to_list()
@@ -208,7 +225,7 @@ async def create_room(request: Request) -> HTMLResponse:
 
     if result["success"]:
         # 设置 Cookie 并返回跳转脚本
-        response = HTMLResponse(content=f'<script>window.location.href="/game/{result["room"].id}";</script>')
+        response = HTMLResponse(content=_build_soft_redirect_script(f"/game/{result['room'].id}"))
         response.set_cookie("player_id", str(result["player"].id), max_age=86400, path="/")
         response.set_cookie("player_token", result["token"], max_age=86400, path="/")
         return response
@@ -235,7 +252,7 @@ async def join_room(request: Request) -> HTMLResponse:
 
     if result["success"]:
         # 设置 Cookie 并返回跳转脚本
-        response = HTMLResponse(content=f'<script>window.location.href="/game/{result["room"].id}";</script>')
+        response = HTMLResponse(content=_build_soft_redirect_script(f"/game/{result['room'].id}"))
         response.set_cookie("player_id", str(result["player"].id), max_age=86400, path="/")
         response.set_cookie("player_token", result["token"], max_age=86400, path="/")
         return response
@@ -276,6 +293,7 @@ async def room_page(request: Request, room_id: str) -> HTMLResponse:
             "current_player": current_player,
             "invite_link": invite_link,
             "bgm_stage": "waiting",
+            "enable_soft_nav": True,
         },
     )
 
@@ -289,6 +307,7 @@ async def result_page(request: Request, room_id: str) -> HTMLResponse:
             "request": request,
             "room_id": room_id,
             "bgm_stage": "finished",
+            "enable_soft_nav": True,
         },
     )
 
@@ -350,6 +369,7 @@ async def play_page(request: Request, room_id: str) -> HTMLResponse:
             "current_round": room.current_round,
             "players": players,
             "bgm_stage": "playing_questioning",
+            "enable_soft_nav": True,
         },
     )
 
@@ -382,6 +402,7 @@ async def setup_page(request: Request, room_id: str) -> HTMLResponse:
             "ai_models": ai_models,
             "prompt_templates": prompt_templates,
             "bgm_stage": "setup",
+            "enable_soft_nav": True,
         },
     )
 
@@ -469,7 +490,7 @@ async def start_game(request: Request, room_id: str) -> HTMLResponse:
     result = await game_manager.start_game(room_id)
     if result["success"]:
         # 成功启动游戏，返回跳转脚本
-        return HTMLResponse(content='<script>window.location.href="/game/' + room_id + '/setup";</script>')
+        return HTMLResponse(content=_build_soft_redirect_script(f"/game/{room_id}/setup"))
     return HTMLResponse(content=f'<div class="text-red-400">{result.get("error", "开始游戏失败")}</div>')
 
 
@@ -628,17 +649,17 @@ async def leave_room(request: Request, room_id: str) -> HTMLResponse:
     """离开房间。"""
     room = await game_room_service.get_room_by_id(room_id)
     if not room:
-        return HTMLResponse(content='<script>window.location.href="/game";</script>')
+        return HTMLResponse(content=_build_soft_redirect_script("/game"))
 
     player = await _get_authed_player(request, room)
     if not player:
-        return HTMLResponse(content='<script>window.location.href="/game";</script>')
+        return HTMLResponse(content=_build_soft_redirect_script("/game"))
 
     result = await game_room_service.leave_room(room_id, str(player.id))
 
     if result["success"]:
         # 清除玩家 Cookie
-        response = HTMLResponse(content='<script>window.location.href="/game";</script>')
+        response = HTMLResponse(content=_build_soft_redirect_script("/game"))
         response.delete_cookie("player_id", path="/")
         response.delete_cookie("player_token", path="/")
         return response

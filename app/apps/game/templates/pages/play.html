@@ -238,6 +238,7 @@
 </div>
 
 <script>
+(() => {
 const roomId = '{{ room.id }}';
 const playerId = '{{ player_id }}';
 const bonusScoringEnabled = {{ "true" if room.config.bonus_scoring_enabled else "false" }};
@@ -273,6 +274,18 @@ let stateSyncTimer = null;
 let isSyncingGameState = false;
 const pendingDraftQueue = new Map();
 let isFlushingDraftQueue = false;
+let hasCleanedUp = false;
+
+// 游戏页跳转统一走软导航，失败时回退硬跳转。
+function navigateTo(path) {
+  const nextPath = String(path || '').trim();
+  if (!nextPath) return false;
+  if (typeof window.ttgNavigate === 'function') {
+    return window.ttgNavigate(nextPath);
+  }
+  window.location.href = nextPath;
+  return true;
+}
 
 function mapPhaseToBgmStage(phase) {
   const phaseKey = String(phase || '').trim().toLowerCase();
@@ -700,7 +713,7 @@ function connectSSE(reason = 'init') {
           markSSEActivity();
           const data = JSON.parse(e.data || '{}');
           stopStateSyncPolling();
-          window.location.href = `/game/${roomId}/result?data=` + encodeURIComponent(JSON.stringify(data));
+          navigateTo(`/game/${roomId}/result?data=` + encodeURIComponent(JSON.stringify(data)));
         },
       },
     });
@@ -1004,13 +1017,13 @@ function hideScoreRules() {
   document.getElementById('score-rules-modal').classList.add('hidden');
 }
 
-// 点击弹窗背景关闭
-document.addEventListener('click', function(e) {
+// 点击弹窗背景关闭。
+function handleModalBackdropClick(e) {
   const modal = document.getElementById('score-rules-modal');
   if (e.target === modal) {
     hideScoreRules();
   }
-});
+}
 
 function showHumanAnswer() {
   document.getElementById('answer-choice-area').classList.add('hidden');
@@ -1108,15 +1121,15 @@ let myNickname = '';
 function redirectByRoomPhase(phase) {
   const normalized = String(phase || '').trim().toLowerCase();
   if (normalized === 'setup') {
-    window.location.href = `/game/${roomId}/setup`;
+    navigateTo(`/game/${roomId}/setup`);
     return true;
   }
   if (normalized === 'waiting') {
-    window.location.href = `/game/${roomId}`;
+    navigateTo(`/game/${roomId}`);
     return true;
   }
   if (normalized === 'finished') {
-    window.location.href = `/game/${roomId}/result`;
+    navigateTo(`/game/${roomId}/result`);
     return true;
   }
   return false;
@@ -1321,31 +1334,89 @@ function handlePageVisible() {
   }
 }
 
-// 页面加载时先获取状态，再连接 SSE
+const questionInputEl = document.getElementById('question-input');
+const answerInputEl = document.getElementById('answer-input');
+
+// 页面退出时清理 SSE 与轮询，避免软导航后残留旧连接。
+function cleanupPlayPage() {
+  if (hasCleanedUp) return;
+  hasCleanedUp = true;
+  flushDraftOnBeforeUnload();
+  stopLocalCountdown();
+  stopStateSyncPolling();
+  stopSSEWatchdog();
+  if (questionInputEl) {
+    questionInputEl.removeEventListener('input', scheduleQuestionDraftSync);
+  }
+  if (answerInputEl) {
+    answerInputEl.removeEventListener('input', scheduleAnswerDraftSync);
+  }
+  window.removeEventListener('online', handleNetworkOnline);
+  window.removeEventListener('offline', handleNetworkOffline);
+  document.removeEventListener('visibilitychange', handlePageVisible);
+  document.removeEventListener('click', handleModalBackdropClick);
+  if (sseClient) {
+    sseClient.close();
+    sseClient = null;
+  }
+  if (window.forceReconnectSSE === forceReconnectSSE) {
+    delete window.forceReconnectSSE;
+  }
+  if (window.submitQuestion === submitQuestion) {
+    delete window.submitQuestion;
+  }
+  if (window.showHumanAnswer === showHumanAnswer) {
+    delete window.showHumanAnswer;
+  }
+  if (window.submitAIAnswer === submitAIAnswer) {
+    delete window.submitAIAnswer;
+  }
+  if (window.submitHumanAnswer === submitHumanAnswer) {
+    delete window.submitHumanAnswer;
+  }
+  if (window.submitVote === submitVote) {
+    delete window.submitVote;
+  }
+  if (window.showScoreRules === showScoreRules) {
+    delete window.showScoreRules;
+  }
+  if (window.hideScoreRules === hideScoreRules) {
+    delete window.hideScoreRules;
+  }
+}
+
+window.forceReconnectSSE = forceReconnectSSE;
+window.submitQuestion = submitQuestion;
+window.showHumanAnswer = showHumanAnswer;
+window.submitAIAnswer = submitAIAnswer;
+window.submitHumanAnswer = submitHumanAnswer;
+window.submitVote = submitVote;
+window.showScoreRules = showScoreRules;
+window.hideScoreRules = hideScoreRules;
+
+if (typeof window.registerGamePageCleanup === 'function') {
+  window.registerGamePageCleanup(cleanupPlayPage);
+} else {
+  window.addEventListener('beforeunload', cleanupPlayPage, { once: true });
+}
+
+// 页面加载时先获取状态，再连接 SSE。
 lockAnswerInputPaste();
-document.getElementById('question-input').addEventListener('input', scheduleQuestionDraftSync);
-document.getElementById('answer-input').addEventListener('input', scheduleAnswerDraftSync);
+if (questionInputEl) {
+  questionInputEl.addEventListener('input', scheduleQuestionDraftSync);
+}
+if (answerInputEl) {
+  answerInputEl.addEventListener('input', scheduleAnswerDraftSync);
+}
 window.addEventListener('online', handleNetworkOnline);
 window.addEventListener('offline', handleNetworkOffline);
 document.addEventListener('visibilitychange', handlePageVisible);
+document.addEventListener('click', handleModalBackdropClick);
 
 setConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复');
 initGameState({ reason: 'initial_load' }).then(() => {
   connectSSE('initial_load');
 });
-
-window.addEventListener('beforeunload', () => {
-  flushDraftOnBeforeUnload();
-  stopLocalCountdown();
-  stopStateSyncPolling();
-  stopSSEWatchdog();
-  window.removeEventListener('online', handleNetworkOnline);
-  window.removeEventListener('offline', handleNetworkOffline);
-  document.removeEventListener('visibilitychange', handlePageVisible);
-  if (sseClient) {
-    sseClient.close();
-    sseClient = null;
-  }
-});
+})();
 </script>
 {% endblock %}

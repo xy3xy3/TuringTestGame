@@ -74,6 +74,8 @@
           class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           hx-post="/game/{{ room.id }}/bonus-scoring"
           hx-target="#bonus-scoring-result"
+          hx-select="unset"
+          hx-push-url="false"
         >
           <label class="inline-flex items-center gap-2 text-sm text-purple-100">
             <input
@@ -110,6 +112,8 @@
         hx-post="/game/{{ room.id }}/ready"
         hx-vals='{"is_ready": "{{ "false" if current_player and current_player.is_ready else "true" }}"}'
         hx-target="#ready-result"
+        hx-select="unset"
+        hx-push-url="false"
       >
         {% if current_player and current_player.is_ready %}取消准备{% else %}准备{% endif %}
       </button>
@@ -120,6 +124,8 @@
         class="flex-1 btn-primary opacity-50 cursor-not-allowed"
         hx-post="/game/{{ room.id }}/start"
         hx-target="#start-result"
+        hx-select="unset"
+        hx-push-url="false"
         disabled
       >
         开始游戏
@@ -130,6 +136,8 @@
         hx-post="/game/{{ room.id }}/leave"
         hx-confirm="确定要离开房间吗？"
         hx-target="body"
+        hx-select="unset"
+        hx-push-url="false"
       >
         离开
       </button>
@@ -145,61 +153,68 @@
 </div>
 
 <script>
-// 复制邀请链接
-function copyInviteLink() {
-  const input = document.getElementById('invite-link');
-  input.select();
-  input.setSelectionRange(0, 99999); // 移动端兼容
-
-  if (navigator.clipboard && window.isSecureContext) {
-    // 使用现代 Clipboard API
-    navigator.clipboard.writeText(input.value).then(() => {
-      showCopyToast('链接已复制！');
-    }).catch(() => {
-      // 降级方案
-      fallbackCopy(input);
-    });
-  } else {
-    // 降级方案
-    fallbackCopy(input);
-  }
-}
-
-function fallbackCopy(input) {
-  try {
-    document.execCommand('copy');
-    showCopyToast('链接已复制！');
-  } catch (err) {
-    showCopyToast('复制失败，请手动复制');
-  }
-}
-
-function showCopyToast(message) {
-  // 创建提示元素
-  const toast = document.createElement('div');
-  toast.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  // 2秒后移除
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transition = 'opacity 0.3s';
-    setTimeout(() => toast.remove(), 300);
-  }, 2000);
-}
-
-// 等待 HTMX 加载完成
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
   const roomId = '{{ room.id }}';
   let roomSSEClient = null;
   let roomPollingTimer = null;
   let roomStateFetchPromise = null;
+  let hasCleanedUp = false;
 
-  // 获取当前玩家 ID（从 Cookie 中读取）
+  // 房间页跳转统一走软导航，确保音乐不中断。
+  function navigateTo(path) {
+    const nextPath = String(path || '').trim();
+    if (!nextPath) return false;
+    if (typeof window.ttgNavigate === 'function') {
+      return window.ttgNavigate(nextPath);
+    }
+    window.location.href = nextPath;
+    return true;
+  }
+
+  // 复制邀请链接。
+  function copyInviteLink() {
+    const input = document.getElementById('invite-link');
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, 99999); // 移动端兼容
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(input.value).then(() => {
+        showCopyToast('链接已复制！');
+      }).catch(() => {
+        fallbackCopy(input);
+      });
+      return;
+    }
+    fallbackCopy(input);
+  }
+
+  function fallbackCopy(input) {
+    try {
+      document.execCommand('copy');
+      showCopyToast('链接已复制！');
+    } catch (_err) {
+      showCopyToast('复制失败，请手动复制');
+    }
+  }
+
+  function showCopyToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.3s';
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }
+
+  // 获取当前玩家 ID（从 Cookie 中读取）。
   function getCurrentPlayerId() {
     const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
+    for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
       if (name === 'player_id') {
         return value;
@@ -208,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
-  // 更新大厅连接状态徽标，统一提示在线/重连/离线状态。
+  // 更新大厅连接状态徽标。
   function setRoomConnectionStatus(status, customText = '') {
     const dot = document.getElementById('room-connection-dot');
     const text = document.getElementById('room-connection-text');
@@ -233,15 +248,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function redirectByRoomPhase(phase) {
     const normalized = String(phase || '').trim().toLowerCase();
     if (normalized === 'setup') {
-      window.location.href = `/game/${roomId}/setup`;
+      navigateTo(`/game/${roomId}/setup`);
       return true;
     }
     if (normalized === 'playing') {
-      window.location.href = `/game/${roomId}/play`;
+      navigateTo(`/game/${roomId}/play`);
       return true;
     }
     if (normalized === 'finished') {
-      window.location.href = `/game/${roomId}/result`;
+      navigateTo(`/game/${roomId}/result`);
       return true;
     }
     return false;
@@ -251,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function startRoomFallbackPolling() {
     if (roomPollingTimer) return;
     roomPollingTimer = setInterval(() => {
-      window.updateReadyButtonState({ silent: true });
+      updateReadyButtonState({ silent: true });
       refreshPlayerList({ silent: true });
     }, 2000);
   }
@@ -262,8 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
     roomPollingTimer = null;
   }
 
-  // 更新准备按钮状态和开始按钮可用性
-  window.updateReadyButtonState = async function(options = {}) {
+  // 更新准备按钮状态和开始按钮可用性。
+  async function updateReadyButtonState(options = {}) {
     const silent = Boolean(options.silent);
     const readyBtn = document.getElementById('ready-btn');
     const startBtn = document.getElementById('start-btn');
@@ -366,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     return roomStateFetchPromise;
-  };
+  }
 
   function refreshPlayerList(options = {}) {
     const silent = Boolean(options.silent);
@@ -383,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (status === 'connected') {
       stopRoomFallbackPolling();
       setRoomConnectionStatus('connected');
-      window.updateReadyButtonState({ silent: true });
+      updateReadyButtonState({ silent: true });
       return;
     }
     startRoomFallbackPolling();
@@ -394,54 +409,16 @@ document.addEventListener('DOMContentLoaded', () => {
     setRoomConnectionStatus('reconnecting');
   }
 
-  roomSSEClient = window.createResilientSSE({
-    url: `/game/${roomId}/events`,
-    onStatusChange: handleRoomSSEStatus,
-    events: {
-      ping: () => {},
-      player_joined: () => {
-        refreshPlayerList();
-        window.updateReadyButtonState({ silent: true });
-      },
-      player_left: () => {
-        refreshPlayerList();
-        window.updateReadyButtonState({ silent: true });
-      },
-      player_ready_changed: () => {
-        refreshPlayerList();
-        window.updateReadyButtonState({ silent: true });
-      },
-      player_kicked: (e) => {
-        const data = JSON.parse(e.data || '{}');
-        const currentPlayerId = getCurrentPlayerId();
-        if (data.player_id && data.player_id === currentPlayerId) {
-          window.location.href = '/game';
-          return;
-        }
-        refreshPlayerList();
-        window.updateReadyButtonState({ silent: true });
-      },
-      bonus_scoring_updated: () => {
-        window.updateReadyButtonState({ silent: true });
-      },
-      game_starting: () => {
-        window.location.href = `/game/${roomId}/setup`;
-      },
-    },
-  });
-
-  roomSSEClient.connect('room_initial');
-
-  window.forceReconnectRoomSSE = function(reason = 'manual') {
+  function forceReconnectRoomSSE(reason = 'manual') {
     if (!roomSSEClient) return;
     roomSSEClient.forceReconnect(reason);
-  };
+  }
 
-  document.body.addEventListener('htmx:afterRequest', (evt) => {
+  const handleRoomAfterRequest = (evt) => {
     const path = evt.detail?.pathInfo?.requestPath || '';
     if (path.includes(`/game/${roomId}/kick/`)) {
       refreshPlayerList();
-      window.updateReadyButtonState({ silent: true });
+      updateReadyButtonState({ silent: true });
       return;
     }
     if (
@@ -451,21 +428,85 @@ document.addEventListener('DOMContentLoaded', () => {
     ) {
       return;
     }
-    window.updateReadyButtonState({ silent: true });
-  });
+    updateReadyButtonState({ silent: true });
+  };
 
-  window.addEventListener('beforeunload', () => {
+  // 页面退出时清理 SSE 与轮询，避免软导航后残留旧连接。
+  function cleanupRoomPage() {
+    if (hasCleanedUp) return;
+    hasCleanedUp = true;
     stopRoomFallbackPolling();
     if (roomSSEClient) {
       roomSSEClient.close();
       roomSSEClient = null;
     }
+    document.body.removeEventListener('htmx:afterRequest', handleRoomAfterRequest);
+    if (window.forceReconnectRoomSSE === forceReconnectRoomSSE) {
+      delete window.forceReconnectRoomSSE;
+    }
+    if (window.updateReadyButtonState === updateReadyButtonState) {
+      delete window.updateReadyButtonState;
+    }
+    if (window.copyInviteLink === copyInviteLink) {
+      delete window.copyInviteLink;
+    }
+  }
+
+  roomSSEClient = window.createResilientSSE({
+    url: `/game/${roomId}/events`,
+    onStatusChange: handleRoomSSEStatus,
+    events: {
+      ping: () => {},
+      player_joined: () => {
+        refreshPlayerList();
+        updateReadyButtonState({ silent: true });
+      },
+      player_left: () => {
+        refreshPlayerList();
+        updateReadyButtonState({ silent: true });
+      },
+      player_ready_changed: () => {
+        refreshPlayerList();
+        updateReadyButtonState({ silent: true });
+      },
+      player_kicked: (e) => {
+        const data = JSON.parse(e.data || '{}');
+        const currentPlayerId = getCurrentPlayerId();
+        if (data.player_id && data.player_id === currentPlayerId) {
+          navigateTo('/game');
+          return;
+        }
+        refreshPlayerList();
+        updateReadyButtonState({ silent: true });
+      },
+      bonus_scoring_updated: () => {
+        updateReadyButtonState({ silent: true });
+      },
+      game_starting: () => {
+        navigateTo(`/game/${roomId}/setup`);
+      },
+    },
   });
 
-  // 初始化
-  setRoomConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline', navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复');
-  window.updateReadyButtonState({ silent: true });
+  roomSSEClient.connect('room_initial');
+  document.body.addEventListener('htmx:afterRequest', handleRoomAfterRequest);
+  window.copyInviteLink = copyInviteLink;
+  window.updateReadyButtonState = updateReadyButtonState;
+  window.forceReconnectRoomSSE = forceReconnectRoomSSE;
+
+  if (typeof window.registerGamePageCleanup === 'function') {
+    window.registerGamePageCleanup(cleanupRoomPage);
+  } else {
+    window.addEventListener('beforeunload', cleanupRoomPage, { once: true });
+  }
+
+  // 初始化。
+  setRoomConnectionStatus(
+    navigator.onLine ? 'reconnecting' : 'offline',
+    navigator.onLine ? '初始化连接中...' : '网络断开，等待恢复'
+  );
+  updateReadyButtonState({ silent: true });
   refreshPlayerList({ silent: true });
-});
+})();
 </script>
 {% endblock %}

@@ -32,7 +32,10 @@
 
     <!-- 操作按钮 -->
     <div class="flex gap-4">
-      <button class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500 py-3" onclick="window.location.href='/game'">
+      <button
+        class="flex-1 btn-primary bg-gradient-to-r from-purple-500 to-pink-500 py-3"
+        onclick="if (window.ttgNavigate) { window.ttgNavigate('/game'); } else { window.location.href='/game'; }"
+      >
         <i class="fa-solid fa-house mr-2"></i>返回大厅
       </button>
     </div>
@@ -40,6 +43,7 @@
 </div>
 
 <script>
+(() => {
 // 从 URL 获取游戏结果数据
 const urlParams = new URLSearchParams(window.location.search);
 const dataParam = urlParams.get('data');
@@ -88,5 +92,6 @@ if (dataParam) {
     console.error('Failed to parse game data:', e);
   }
 }
+})();
 </script>
 {% endblock %}
